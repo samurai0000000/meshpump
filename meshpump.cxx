@@ -93,6 +93,7 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    pump->setClient(pump);
     pump->setVerbose(verbose);
     pump->enableLogStderr(log);
 

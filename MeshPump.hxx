@@ -8,12 +8,14 @@
 #define MESHPUMP_HXX
 
 #include <LibMeshtastic.hxx>
+#include <HomeChat.hxx>
 
 using namespace std;
 
 class MqttClient;
 
-class MeshPump : public MeshClient {
+class MeshPump : public MeshClient, public HomeChat,
+                 public enable_shared_from_this<MeshPump> {
 
 public:
 
@@ -30,6 +32,11 @@ protected:
                             const meshtastic_Routing &routing);
     virtual void gotTraceRoute(const meshtastic_MeshPacket &packet,
                                const meshtastic_RouteDiscovery &routeDiscovery);
+
+protected:
+
+    virtual int vprintf(const char *format, va_list ap) const;
+
 };
 
 #endif
