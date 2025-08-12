@@ -9,12 +9,13 @@
 
 #include <LibMeshtastic.hxx>
 #include <HomeChat.hxx>
+#include <MeshNVM.hxx>
 
 using namespace std;
 
 class MqttClient;
 
-class MeshPump : public MeshClient, public HomeChat,
+class MeshPump : public MeshClient, public MeshNVM, public HomeChat,
                  public enable_shared_from_this<MeshPump> {
 
 public:
@@ -26,14 +27,25 @@ public:
 
 protected:
 
+    // Extend MeshClient
+
     virtual void gotTextMessage(const meshtastic_MeshPacket &packet,
                                 const string &message);
-    virtual void gotRouting(const meshtastic_MeshPacket &packet,
-                            const meshtastic_Routing &routing);
-    virtual void gotTraceRoute(const meshtastic_MeshPacket &packet,
-                               const meshtastic_RouteDiscovery &routeDiscovery);
+
+    inline virtual HomeChat *getHomeChat(void) {
+        return this;
+    }
+
+public:
+
+    // Extend MeshNVM
+
+    virtual bool loadNvm(void);
+    virtual bool saveNvm(void);
 
 protected:
+
+    // Extend HomeChat
 
     virtual int vprintf(const char *format, va_list ap) const;
 

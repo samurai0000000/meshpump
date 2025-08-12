@@ -38,48 +38,22 @@ void MeshPump::gotTextMessage(const meshtastic_MeshPacket &packet,
     }
 }
 
-void MeshPump::gotRouting(const meshtastic_MeshPacket &packet,
-                         const meshtastic_Routing &routing)
+bool MeshPump::loadNvm(void)
 {
-    MeshClient::gotRouting(packet, routing);
+    bool result;
 
-    if ((routing.which_variant == meshtastic_Routing_error_reason_tag) &&
-        (routing.error_reason == meshtastic_Routing_Error_NONE) &&
-        (packet.from != packet.to)) {
-        cout << "traceroute from " << getDisplayName(packet.from) << " -> ";
-        cout << getDisplayName(packet.to)
-             << "[" << packet.rx_snr << "dB]" << endl;
-    }
+    result = MeshNVM::loadNvm();
+
+    return result;
 }
 
-void MeshPump::gotTraceRoute(const meshtastic_MeshPacket &packet,
-                            const meshtastic_RouteDiscovery &routeDiscovery)
+bool MeshPump::saveNvm(void)
 {
-    MeshClient::gotTraceRoute(packet, routeDiscovery);
-    if (!verbose()) {
-        if ((routeDiscovery.route_count > 0) &&
-            (routeDiscovery.route_back_count == 0)) {
-            float rx_snr;
-            cout << "traceroute from " << getDisplayName(packet.from)
-                 << " -> ";
-            for (unsigned int i = 0; i < routeDiscovery.route_count; i++) {
-                if (i > 0) {
-                    cout << " -> ";
-                }
-                cout << getDisplayName(routeDiscovery.route[i]);
-                if (routeDiscovery.snr_towards[i] != INT8_MIN) {
-                    rx_snr = routeDiscovery.snr_towards[i];
-                    rx_snr /= 4.0;
-                    cout << "[" << rx_snr << "dB]";
-                } else {
-                    cout << "[???dB]";
-                }
-            }
-            rx_snr = packet.rx_snr;
-            cout << " -> " << getDisplayName(packet.to)
-                 << "[" << rx_snr << "dB]" << endl;
-        }
-    }
+    bool result;
+
+    result = MeshNVM::saveNvm();
+
+    return result;
 }
 
 static inline int stdio_vprintf(const char *format, va_list ap)

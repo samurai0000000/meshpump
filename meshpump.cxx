@@ -11,29 +11,40 @@
 #if defined(USE_PIGPIO)
 #include <pigpiod_if.h>
 #endif
-#include <MeshPump.hxx>
-#include <LedMatrix.hxx>
+#include <MeshShell.hxx>
+#include "MeshPump.hxx"
+#include "LedMatrix.hxx"
 
 #define DEFAULT_DEVICE "/dev/ttyAMA0"
 
 shared_ptr<MeshPump> pump = NULL;
+shared_ptr<MeshShell> stdioShell = NULL;
+shared_ptr<MeshShell> netShell = NULL;
 shared_ptr<LedMatrix> leds = NULL;
 
 static const struct option long_options[] = {
     { "device", required_argument, NULL, 'd', },
+    { "stdio", no_argument, NULL, 's', },
+    { "port", required_argument, NULL, 'p', },
     { "verbose", no_argument, NULL, 'v', },
     { "log", no_argument, NULL, 'l', },
 };
 
 void sighandler(int signum)
 {
-    if (signum == SIGINT) {
-        if (pump) {
-            pump->detach();
-        }
-        if (leds) {
-            leds->stop();
-        }
+    (void)(signum);
+
+    if (pump) {
+        pump->detach();
+    }
+    if (stdioShell) {
+        stdioShell->detach();
+    }
+    if (netShell) {
+        netShell->detach();
+    }
+    if (leds) {
+        leds->stop();
     }
 }
 
@@ -48,12 +59,13 @@ int main(int argc, char **argv)
 {
     int ret = 0;
     string device = DEFAULT_DEVICE;
+    uint16_t port = 0;
     bool verbose = false;
     bool log = false;
 
     for (;;) {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "d:vl",
+        int c = getopt_long(argc, argv, "d:sp:vl",
                             long_options, &option_index);
         if (c == -1) {
             break;
@@ -62,6 +74,17 @@ int main(int argc, char **argv)
         switch (c) {
         case 'd':
             device = optarg;
+            break;
+        case 's':
+            if (stdioShell == NULL) {
+                stdioShell = make_shared<MeshShell>();
+            }
+            break;
+        case 'p':
+            port = atoi(optarg);
+            if (netShell == NULL) {
+                netShell = make_shared<MeshShell>();
+            }
             break;
         case 'v':
             verbose = true;
@@ -86,6 +109,7 @@ int main(int argc, char **argv)
 #endif
 
     atexit(cleanup);
+    signal(SIGINT, sighandler);
 
     pump = make_shared<MeshPump>();
     if (pump->attachSerial(device) == false) {
@@ -97,14 +121,31 @@ int main(int argc, char **argv)
     pump->setVerbose(verbose);
     pump->enableLogStderr(log);
 
+    if (netShell) {
+        netShell->setClient(pump);
+        netShell->setNVM(pump);
+        netShell->bindPort(port);
+    }
+
+    if (stdioShell) {
+        stdioShell->setClient(pump);
+        stdioShell->setNVM(pump);
+        stdioShell->attachStdio();
+    }
+
     leds = make_shared<LedMatrix>();
 
-    signal(SIGINT, sighandler);
+    /* ------- */
 
     if (pump) {
         pump->join();
     }
-
+    if (stdioShell) {
+        stdioShell->join();
+    }
+    if (netShell) {
+        netShell->join();
+    }
     if (leds) {
         leds->join();
     }

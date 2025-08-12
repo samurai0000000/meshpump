@@ -21,8 +21,9 @@ add_compile_options(-g -O2)
 
 add_executable(meshpump meshpump.cxx MeshPump.cxx LedMatrix.cxx)
 target_include_directories(meshpump PRIVATE ${MOSQUITTO_INCLUDE_DIR})
-target_link_libraries(meshpump PUBLIC libmeshtastic)
-target_link_libraries(meshpump PRIVATE ${MOSQUITTO_LIBRARY})
+target_link_libraries(meshpump PRIVATE
+  libmeshtastic
+  ${CONFIG++_LIBRARY})
 if (USE_PIGPIO)
   target_compile_definitions(meshpump PRIVATE USE_PIGPIO=${USE_PIGPIO})
   target_link_libraries(meshpump PRIVATE pigpiod_if)
