@@ -29,14 +29,6 @@ shared_ptr<MeshShell> stdioShell = NULL;
 shared_ptr<MeshShell> netShell = NULL;
 shared_ptr<LedMatrix> leds = NULL;
 
-static const struct option long_options[] = {
-    { "device", required_argument, NULL, 'd', },
-    { "stdio", no_argument, NULL, 's', },
-    { "port", required_argument, NULL, 'p', },
-    { "verbose", no_argument, NULL, 'v', },
-    { "log", no_argument, NULL, 'l', },
-};
-
 void sighandler(int signum)
 {
     (void)(signum);
@@ -99,6 +91,15 @@ done:
     return;
 }
 
+static const struct option long_options[] = {
+    { "device", required_argument, NULL, 'd', },
+    { "stdio", no_argument, NULL, 's', },
+    { "port", required_argument, NULL, 'p', },
+    { "daemon", no_argument, NULL, 'b', },
+    { "verbose", no_argument, NULL, 'v', },
+    { "log", no_argument, NULL, 'l', },
+};
+
 int main(int argc, char **argv)
 {
     int ret = 0;
@@ -107,6 +108,7 @@ int main(int argc, char **argv)
     string device = DEFAULT_DEVICE;
     bool useStdioShell = false;
     uint16_t port = 0;
+    bool daemon = false;
     bool verbose = false;
     bool log = false;
     string banner;
@@ -156,9 +158,18 @@ int main(int argc, char **argv)
     } catch (SettingTypeException &e) {
     }
 
+    try {
+        bool cfgDaemon = 0;
+        Setting &root = cfg.getRoot();
+        root.lookupValue("daemon", cfgDaemon);
+        daemon = cfgDaemon;
+    } catch (SettingNotFoundException &e) {
+    } catch (SettingTypeException &e) {
+    }
+
     for (;;) {
         int option_index = 0;
-        int c = getopt_long(argc, argv, "d:sp:vl",
+        int c = getopt_long(argc, argv, "d:sp:bvl",
                             long_options, &option_index);
         if (c == -1) {
             break;
@@ -173,6 +184,9 @@ int main(int argc, char **argv)
             break;
         case 'p':
             port = atoi(optarg);
+            break;
+        case 'b':
+            daemon = true;
             break;
         case 'v':
             verbose = true;
@@ -200,8 +214,39 @@ int main(int argc, char **argv)
     }
 #endif
 
+    if (daemon) {
+        pid_t pid;
+        int fdevnull;
+
+        useStdioShell = false;
+        verbose = false;
+        if (port == 0) {
+            port = 16876;
+        }
+
+        pid = fork();
+        if (pid == -1) {
+            cerr << "fork failed!" << endl;
+            exit(EXIT_FAILURE);
+        } else if (pid  != 0) {
+            exit(EXIT_SUCCESS);
+        } else {
+            close(STDIN_FILENO);
+            close(STDOUT_FILENO);
+            close(STDERR_FILENO);
+
+            fdevnull = open("/dev/null", O_WRONLY);
+            if (fdevnull != -1) {
+                dup2(fdevnull, STDOUT_FILENO);
+                dup2(fdevnull, STDERR_FILENO);
+                close(fdevnull);
+            }
+        }
+    }
+
     atexit(cleanup);
     signal(SIGINT, sighandler);
+    signal(SIGPIPE, SIG_IGN);
 
     pump = make_shared<MeshPump>();
     if (pump->attachSerial(device) == false) {
