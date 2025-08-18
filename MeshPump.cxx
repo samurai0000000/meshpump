@@ -51,6 +51,12 @@ void MeshPump::setUpPumpOnOff(bool on)
     _upPump = on;
 }
 
+void MeshPump::setUpPumpOnWithCutoffSec(unsigned int seconds)
+{
+    (void)(seconds);
+    _upPump = true;
+}
+
 unsigned int MeshPump::getUpPumpAutoCutoffSec(void) const
 {
     return _upPumpAutoCutoffSec;
@@ -97,8 +103,8 @@ string MeshPump::handleUnknown(uint32_t node_num, string &message)
     string first_word;
 
     (void)(node_num);
+    (void)(message);
 
-    // get first word
     first_word = message.substr(0, message.find(' '));
     toLowercase(first_word);
     message = message.substr(first_word.size());
@@ -106,9 +112,25 @@ string MeshPump::handleUnknown(uint32_t node_num, string &message)
 
     if (first_word == "led") {
         reply = handleLed(node_num, message);
+    } else if (first_word == "pump") {
+        reply = handlePump(node_num, message);
     }
 
     return reply;
+}
+
+string MeshPump::handleStatus(uint32_t node_num, string &message)
+{
+    stringstream ss;
+
+    (void)(node_num);
+    (void)(message);
+
+    ss << "fish-pump: " << (isFishPumpOn() ? "on" : "off") << endl;
+    ss << "up-pump: " << (isUpPumpOn() ? "on" : "off") << endl;
+    ss << "up-pump auto cutoff: " << getUpPumpAutoCutoffSec() << " seconds";
+
+    return ss.str();
 }
 
 string MeshPump::handleLed(uint32_t node_num, string &message)
@@ -116,7 +138,6 @@ string MeshPump::handleLed(uint32_t node_num, string &message)
     string reply;
     string first_word;
 
-    // get first word
     first_word = message.substr(0, message.find(' '));
     toLowercase(first_word);
 
@@ -142,6 +163,97 @@ string MeshPump::handleLed(uint32_t node_num, string &message)
 
     reply = "Led matrix updated for ";
     reply += getDisplayName(node_num);
+
+    return reply;
+}
+
+string MeshPump::handlePump(uint32_t node_num, string &message)
+{
+    string reply;
+    string first_word, second_word, third_word;
+    bool isFish = false;
+    bool isUp = false;
+    bool onOff = false;
+    unsigned int cutoff = 0;
+
+    (void)(message);
+
+    first_word = message.substr(0, message.find(' '));
+    toLowercase(first_word);
+
+    if ((first_word == "0") ||
+        (first_word == "fish") ||
+        (first_word == "fish-pump")) {
+        isFish = true;
+    } else if ((first_word == "1") ||
+               (first_word == "up") ||
+               (first_word == "up-pump")) {
+        isUp = true;
+    } else {
+        reply = "no pump specified!";
+        goto done;
+    }
+
+    message = message.substr(first_word.size());
+    trimWhitespace(message);
+    second_word = message.substr(0, message.find(' '));
+    toLowercase(second_word);
+
+    if (second_word == "on") {
+        onOff = true;
+    } else if (second_word == "off") {
+        onOff = false;
+    } else {
+        reply = "no on/off specified!";
+        goto done;
+    }
+
+    if (isUp && (onOff == true)) {
+        message = message.substr(second_word.size());
+        trimWhitespace(message);
+        third_word = message.substr(0, message.find(' '));
+        toLowercase(third_word);
+
+        try {
+            cutoff = stoi(third_word);
+        } catch (const invalid_argument &e) {
+        }
+
+        if (cutoff > 120) {
+            reply = "cut-off of " + to_string(cutoff) +
+                " seconds is too big!";
+            goto done;
+        }
+    }
+
+    if (isFish) {
+        setFishPumpOnOff(onOff);
+        reply = "set fish-pump to ";
+        reply += (onOff ? "on" : "off");
+        reply += " by ";
+        reply += getDisplayName(node_num);
+    } else if (isUp) {
+        if (onOff == false) {
+            setUpPumpOnOff(false);
+            reply = "set up-pump to off by " + getDisplayName(node_num);
+        } else {
+            if (cutoff == 0) {
+                setUpPumpOnOff(true);
+                reply = "set up-pump to on for " +
+                    to_string(getUpPumpAutoCutoffSec()) +
+                    " seconds by " +
+                    getDisplayName(node_num);
+            } else {
+                setUpPumpOnWithCutoffSec(cutoff);
+                reply = "set up-pump to on for " +
+                    to_string(cutoff) +
+                    " seconds by " +
+                    getDisplayName(node_num);
+            }
+        }
+    }
+
+done:
 
     return reply;
 }

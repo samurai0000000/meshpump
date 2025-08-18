@@ -30,6 +30,7 @@ public:
 
     bool isUpPumpOn(void) const;
     void setUpPumpOnOff(bool on);
+    void setUpPumpOnWithCutoffSec(unsigned int seconds);
     unsigned int getUpPumpAutoCutoffSec(void) const;
     void setUpPumpAutoCutoffSec(unsigned int seconds);
 
@@ -56,7 +57,9 @@ protected:
     // Extend HomeChat
 
     virtual string handleUnknown(uint32_t node_num, string &message);
+    virtual string handleStatus(uint32_t node_num, string &message);
     virtual string handleLed(uint32_t node_num, string &message);
+    virtual string handlePump(uint32_t node_num, string &message);
     virtual int vprintf(const char *format, va_list ap) const;
 
 private:
