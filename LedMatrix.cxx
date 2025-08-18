@@ -8,16 +8,10 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
-#if defined(USE_PIGPIO)
 #include <pigpiod_if.h>
-#else
-#include <fcntl.h>
-#include <sys/ioctl.h>
-#include <linux/types.h>
-#include <linux/spi/spidev.h>
-#endif
 #include <cstring>
 #include <iostream>
+#include "font8x8/font8x8.h"
 #include <max7219_defs.h>
 #include <LedMatrix.hxx>
 
@@ -33,9 +27,7 @@
     PI_SPI_FLAGS_RESVD(0)    |              \
     PI_SPI_FLAGS_CSPOLS(0)   |              \
     PI_SPI_FLAGS_MODE(0)
-#define MAX7219_COUNT      4
-
-#define ALWAYS_REFRESH_ALL
+#define MAX7219_COUNT      (4 * 4)
 
 /*
  * MAX 7219:
@@ -46,61 +38,15 @@
  * blue      clk   spi_clk(11)
  */
 
-enum mouth_mode {
-    MOUTH_BEH,
-    MOUTH_SMILE,
-    MOUTH_CYLON,
-    MOUTH_SPEAK,
-    MOUTH_TEXT,
-};
-
 LedMatrix::LedMatrix()
   : _intensity(1),
-    _fb(),
-    _mode(MOUTH_BEH)
+    _fb()
 {
-#if defined(USE_PIGPIO)
     _handle = spi_open(MAX7219_SPI_CHAN, MAX7219_SPI_SPEED, MAX7219_SPI_MODE);
     if (_handle < 0) {
         cerr << "spiOpen failed!" << endl;
         exit(EXIT_FAILURE);
     }
-#else
-    int ret;
-    uint8_t mode = SPI_MODE_0;
-    uint8_t bits_per_word = 8;
-    uint32_t speed_hz = MAX7219_SPI_SPEED;
-
-    _fd = open("/dev/spidev0.0", O_RDWR);
-    if (_fd == -1) {
-        cerr << "/dev/spidev/0.0: " << strerror(errno) << endl;
-        exit(EXIT_FAILURE);
-    }
-
-    ret = ioctl(_fd, SPI_IOC_WR_MODE, &mode);
-    if (ret == -1) {
-        cerr << "SPI_IOC_WR_MODE: " << strerror(errno) << endl;
-        close(_fd);
-        _fd = -1;
-        exit(EXIT_FAILURE);
-    }
-
-    ret = ioctl(_fd, SPI_IOC_WR_BITS_PER_WORD, &bits_per_word);
-    if (ret == -1) {
-        cerr << "SPI_IOC_WR_BITS_PER_WORD: " << strerror(errno) << endl;
-        close(_fd);
-        _fd = -1;
-        exit(EXIT_FAILURE);
-    }
-
-    ret = ioctl(_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed_hz);
-    if (ret == -1) {
-        cerr << "SPI_IOC_WR_MAX_SPEED_HZ: " << strerror(errno) << endl;
-        close(_fd);
-        _fd = -1;
-        exit(EXIT_FAILURE);
-    }
-#endif
 
     writeMax7219(DECODE_MODE_REG, 0);
     writeMax7219(INTENSITY_REG, _intensity);
@@ -116,7 +62,10 @@ LedMatrix::LedMatrix()
     writeMax7219(DIGIT6_REG, 0);
     writeMax7219(DIGIT7_REG, 0);
 
-    beh();
+    setText(0, "");
+    setText(1, "");
+    setText(2, "");
+    setText(3, "");
 
     _running = true;
     pthread_mutex_init(&_mutex, NULL);
@@ -131,17 +80,10 @@ LedMatrix::~LedMatrix()
     pthread_cond_broadcast(&_cond);
     pthread_join(_thread, NULL);
 
-#if defined(USE_PIGPIO)
     if (_handle >= 0) {
         spi_close(_handle);
         _handle = -1;
     }
-#else
-    if (_fd != -1) {
-        close(_fd);
-        _fd = -1;
-    }
-#endif
 
     pthread_mutex_destroy(&_mutex);
     pthread_cond_destroy(&_cond);
@@ -167,251 +109,6 @@ void *LedMatrix::thread_func(void *args)
     return NULL;
 }
 
-void LedMatrix::behCycle(unsigned int cycle)
-{
-    static const uint32_t bitmap[][8] = {
-        {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x0007e000,
-            0x03ffffc0,
-            0x0007e000,
-            0x00000000,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x0003c000,
-            0x07ffffe0,
-            0x0003c000,
-            0x00000000,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00018000,
-            0x0ffffff0,
-            0x00018000,
-            0x00000000,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x1ffffff8,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-        },
-    };
-    static int x = 0, dir = 0;
-
-    if ((cycle % 20) == 0) {
-        draw(&bitmap[x][0]);
-
-        if (dir == 0) {
-            x++;
-        } else {
-            x--;
-        }
-
-        if (x >= (int) ((sizeof(bitmap) / 32) - 1)) {
-            x = (sizeof(bitmap) / 32) - 1;
-            dir = 1;
-        } else if (x < 0) {
-            x = 1;
-            dir = 0;
-        }
-    }
-}
-
-void LedMatrix::smileCycle(unsigned int cycle)
-{
-    static const uint32_t bitmap[][8] = {
-        {
-            0xc0000003,
-            0xc0000003,
-            0x3000000c,
-            0x3000000c,
-            0x0c000030,
-            0x0c000030,
-            0x03ffffc0,
-            0x03ffffc0,
-        }, {
-            0x00000000,
-            0xc0000003,
-            0x3000000c,
-            0x3000000c,
-            0x0c000030,
-            0x0c000030,
-            0x03ffffc0,
-            0x03ffffc0,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x3000000c,
-            0x0c000030,
-            0x0c000030,
-            0x03ffffc0,
-            0x03ffffc0,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x0c000030,
-            0x0c000030,
-            0x03ffffc0,
-            0x03ffffc0,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x0c000030,
-            0x03ffffc0,
-            0x03ffffc0,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x03ffffc0,
-            0x03ffffc0,
-        },
-    };
-    static int x = 0, dir = 0;
-
-    if ((cycle % 20) == 0) {
-        draw(&bitmap[x][0]);
-
-        if (dir == 0) {
-            x++;
-        } else {
-            x--;
-        }
-
-        if (x >= (int) ((sizeof(bitmap) / 32) - 1)) {
-            x = (sizeof(bitmap) / 32) - 1;
-            dir = 1;
-        } else if (x < 0) {
-            x = 0;
-            dir = 0;
-        }
-    }
-}
-
-void LedMatrix::cylonCycle(unsigned int cycle)
-{
-    static int x = 0, dir = 0;
-    unsigned int i;
-
-
-    if (cycle) {
-        for (i = 0; i < 8; i++) {
-            _fb[i] = (0x1 << x);
-        }
-
-        if (dir == 0) {
-            x++;
-        } else {
-            x--;
-        }
-
-        if (x > 31) {
-            x = 31;
-            dir = 1;
-        } else if (x < 0) {
-            x = 0;
-            dir = 0;
-        }
-    }
-}
-
-void LedMatrix::speakCycle(unsigned int cycle)
-{
-    static const uint32_t bitmap[][8] = {
-        {
-            0x00000000,
-            0x3ffffffc,
-            0x3000000c,
-            0x3000000c,
-            0x3000000c,
-            0x3000000c,
-            0x3ffffffc,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x3ffffffc,
-            0x3000000c,
-            0x3000000c,
-            0x3000000c,
-            0x3ffffffc,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x3ffffffc,
-            0x3000000c,
-            0x3000000c,
-            0x3ffffffc,
-            0x00000000,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x3ffffffc,
-            0x3000000c,
-            0x3ffffffc,
-            0x00000000,
-            0x00000000,
-        }, {
-            0x00000000,
-            0x00000000,
-            0x00000000,
-            0x3ffffffc,
-            0x3ffffffc,
-            0x00000000,
-            0x00000000,
-            0x00000000,
-        },
-    };
-    static int x = 0, dir = 0;
-
-    if ((cycle % 5) == 0) {
-        draw(&bitmap[x][0]);
-
-        if (dir == 0) {
-            x++;
-        } else {
-            x--;
-        }
-
-        if (x >= (int) ((sizeof(bitmap) / 32) - 1)) {
-            x = (sizeof(bitmap) / 32) - 1;
-            dir = 1;
-        } else if (x < 0) {
-            x = 0;
-            dir = 0;
-        }
-    }
-}
-
-void LedMatrix::textCycle(unsigned int cycle)
-{
-    (void)(cycle);
-}
-
 static struct timespec *timespecadd(struct timespec *result,
                                     struct timespec *ts1,
                                     struct timespec *ts2) {
@@ -430,87 +127,56 @@ static struct timespec *timespecadd(struct timespec *result,
 void LedMatrix::run(void)
 {
     struct timespec ts, tloop;
-    unsigned int l_intensity;
-    uint32_t l_fb[8];
-    char xmit[MAX7219_COUNT * 2];
     unsigned int cycle;
-
-    l_intensity = _intensity;
-    memset(l_fb, 0x0, sizeof(l_fb));
+    unsigned int i;
 
     tloop.tv_sec = 0;
-    tloop.tv_nsec = 20000000;
+    tloop.tv_nsec = 250000000;
 
     for (cycle = 0; _running; cycle++) {
-        int ret;
-        unsigned int i;
-
         clock_gettime(CLOCK_REALTIME, &ts);
         timespecadd(&ts, &tloop, &ts);
 
-        switch (_mode) {
-        case MOUTH_BEH:
-            behCycle(cycle);
-            break;
-        case MOUTH_SMILE:
-            smileCycle(cycle);
-            break;
-        case MOUTH_CYLON:
-            cylonCycle(cycle);
-            break;
-        case MOUTH_SPEAK:
-            speakCycle(cycle);
-            break;
-        case MOUTH_TEXT:
-            textCycle(cycle);
-            break;
-        default:
-            break;
-        }
-
-        /* Periodically reprogram the registers */
-        if (cycle % 256 == 0) {
-            writeMax7219(DECODE_MODE_REG, 0);
-            writeMax7219(INTENSITY_REG, _intensity);
-            writeMax7219(SCAN_LIMIT_REG, 7);
-            writeMax7219(SHUTDOWN_REG, 1);
-            writeMax7219(DISPLAY_TEST_REG, 0);
-#if !defined(ALWAYS_REFRESH_ALL)
-            for (i = 0; i < 8; i++) {
-                l_fb[i] = ~_fb[i];  // Flip bits to force refresh
+        for (i = 0; i < 4; i++) {
+            if (((_pos[i] + 0) >= 0) &&
+                ((_pos[i] + 0) < (int) _text[i].size())) {
+                draw(i, 0, (const uint8_t *)
+                     font8x8_basic[_text[i][_pos[i] + 0] % 128]);
+            } else {
+                draw(i, 0, (const uint8_t *) font8x8_basic[0]);
             }
-#endif
-        }
-
-        /* Update intensity */
-        if (l_intensity != _intensity) {
-            l_intensity = _intensity;
-            writeMax7219(INTENSITY_REG, l_intensity);
-        }
-
-#if defined(ALWAYS_REFRESH_ALL)
-            for (i = 0; i < 8; i++) {
-                l_fb[i] = ~_fb[i];  // Flip bits to force refresh
+            if (((_pos[i] + 1) >= 0) &&
+                (_pos[i] + 1) < (int) _text[i].size()) {
+                draw(i, 1, (const uint8_t *)
+                     font8x8_basic[_text[i][_pos[i] + 1] % 128]);
+            } else {
+                draw(i, 1, (const uint8_t *) font8x8_basic[0]);
             }
-#endif
+            if (((_pos[i] + 2) >= 0) &&
+                (_pos[i] + 2) < (int) _text[i].size()) {
+                draw(i, 2, (const uint8_t *)
+                     font8x8_basic[_text[i][_pos[i] + 2] % 128]);
+            } else {
+                draw(i, 2, (const uint8_t *) font8x8_basic[0]);
+            }
+            if (((_pos[i] + 3) >= 0) &&
+                (_pos[i] + 3) < (int) _text[i].size()) {
+                draw(i, 3, (const uint8_t *)
+                     font8x8_basic[_text[i][_pos[i] + 3] % 128]);
+            } else {
+                draw(i, 3, (const uint8_t *) font8x8_basic[0]);
+            }
 
-        /* Update frame buffer */
-        for (i = 0; i < 8; i++) {
-            if (l_fb[i] != _fb[i]) {
-                l_fb[i] = _fb[i];
-                xmit[0] = DIGIT7_REG - i;
-                xmit[1] = (uint8_t) (l_fb[i] >> 24);
-                xmit[2] = DIGIT7_REG - i;
-                xmit[3] = (uint8_t) (l_fb[i] >> 16);
-                xmit[4] = DIGIT7_REG - i;
-                xmit[5] = (uint8_t) (l_fb[i] >> 8);
-                xmit[6] = DIGIT7_REG - i;
-                xmit[7] = (uint8_t) (l_fb[i] >> 0);
+            if (_text[i].size() > 4) {
+                _pos[i]++;
+            }
 
-                ret = writeMax7219(xmit, sizeof(xmit));
-                (void)(ret);
+            if (_pos[i] > (int) _text[i].size()) {
+                _pos[i] = -4;
             }
         }
+
+        repaint();
 
         pthread_mutex_lock(&_mutex);
         pthread_cond_timedwait(&_cond, &_mutex, &ts);
@@ -524,29 +190,17 @@ int LedMatrix::writeMax7219(const void *data, size_t size)
 {
     int ret;
 
-#if defined(USE_PIGPIO)
+    pthread_mutex_lock(&_mutex);
     ret = spi_write(_handle, (char *) data, size);
+    pthread_mutex_unlock(&_mutex);
     if (ret != (int) size) {
         cerr << "spi_write failed!" << endl;
     }
-#else
-    struct spi_ioc_transfer xfer;
-
-    bzero(&xfer, sizeof(xfer));
-    xfer.tx_buf = (__u64) data;
-    xfer.len = size;
-    xfer.bits_per_word = 8;
-
-    ret = ioctl(_fd, SPI_IOC_MESSAGE(1), &xfer);
-    if (ret == -1) {
-        cerr << "SPI_IOC_MESSAGE: " << strerror(errno) << endl;
-    }
-#endif
 
     return ret;
 }
 
-int LedMatrix::writeMax7219(uint8_t reg, uint8_t data) const
+int LedMatrix::writeMax7219(uint8_t reg, uint8_t data)
 {
     int ret;
     unsigned int i;
@@ -557,24 +211,12 @@ int LedMatrix::writeMax7219(uint8_t reg, uint8_t data) const
         xmit[i * 2 + 1] = data;
     }
 
-#if defined(USE_PIGPIO)
+    pthread_mutex_lock(&_mutex);
     ret = spi_write(_handle, xmit, sizeof(xmit));
+    pthread_mutex_unlock(&_mutex);
     if (ret != sizeof(xmit)) {
         cerr << "spi_write failed!" << endl;
     }
-#else
-    struct spi_ioc_transfer xfer;
-
-    bzero(&xfer, sizeof(xfer));
-    xfer.tx_buf = (__u64) xmit;
-    xfer.len = sizeof(xmit);
-    xfer.bits_per_word = 8;
-
-    ret = ioctl(_fd, SPI_IOC_MESSAGE(1), &xfer);
-    if (ret == -1) {
-        cerr << "SPI_IOC_MESSAGE: " << strerror(errno) << endl;
-    }
-#endif
 
     return ret;
 }
@@ -587,49 +229,81 @@ unsigned int LedMatrix::intensity(void) const
 void LedMatrix::setIntensity(unsigned int intensity)
 {
     _intensity = intensity;
+    writeMax7219(INTENSITY_REG, _intensity);
 }
 
-void LedMatrix::draw(const uint32_t fb[8])
+void LedMatrix::setText(unsigned int layer, const string &text)
 {
-    memcpy(_fb, fb, sizeof(_fb));
+    pthread_mutex_lock(&_mutex);
+    _text[layer] = text;
+    if (text.size() <= 4) {
+        _pos[layer] = 0;
+    } else {
+        _pos[layer] = -4;
+    }
+    pthread_mutex_unlock(&_mutex);
 }
 
-unsigned int LedMatrix::mode(void) const
+void LedMatrix::draw(unsigned int layer, const uint32_t fb[8])
 {
-    return _mode;
+    pthread_mutex_lock(&_mutex);
+    for (unsigned int i = 0; i < 8; i++) {
+        _fb[layer][i] = fb[i];
+    }
+    pthread_mutex_unlock(&_mutex);
 }
 
-void LedMatrix::setMode(unsigned int mode)
+void LedMatrix::draw(unsigned int i, unsigned int j, const uint8_t fb[8])
 {
-    _mode = mode;
+    uint8_t *one = ((uint8_t *) _fb[i]);
+
+    pthread_mutex_lock(&_mutex);
+    for (unsigned int k = 0; k < 8; k++) {
+        one[k * 4 + j] = fb[k];
+    }
+    pthread_mutex_unlock(&_mutex);
 }
 
-void LedMatrix::beh(void)
+void LedMatrix::repaint(void)
 {
-    setMode(MOUTH_BEH);
-}
+    uint8_t xmit[MAX7219_COUNT * 2];
 
-void LedMatrix::smile(void)
-{
-    setMode(MOUTH_SMILE);
-}
+    for (unsigned int i = 0; i < 8; i++) {
+        xmit[ 0] = DIGIT7_REG - i;
+        xmit[ 1] = (uint8_t) (_fb[0][i] >> 24);
+        xmit[ 2] = DIGIT7_REG - i;
+        xmit[ 3] = (uint8_t) (_fb[0][i] >> 16);
+        xmit[ 4] = DIGIT7_REG - i;
+        xmit[ 5] = (uint8_t) (_fb[0][i] >> 8);
+        xmit[ 6] = DIGIT7_REG - i;
+        xmit[ 7] = (uint8_t) (_fb[0][i] >> 0);
+        xmit[ 8] = DIGIT7_REG - i;
+        xmit[ 9] = (uint8_t) (_fb[1][i] >> 24);
+        xmit[10] = DIGIT7_REG - i;
+        xmit[11] = (uint8_t) (_fb[1][i] >> 16);
+        xmit[12] = DIGIT7_REG - i;
+        xmit[13] = (uint8_t) (_fb[1][i] >> 8);
+        xmit[14] = DIGIT7_REG - i;
+        xmit[15] = (uint8_t) (_fb[1][i] >> 0);
+        xmit[16] = DIGIT7_REG - i;
+        xmit[17] = (uint8_t) (_fb[2][i] >> 24);
+        xmit[18] = DIGIT7_REG - i;
+        xmit[19] = (uint8_t) (_fb[2][i] >> 16);
+        xmit[20] = DIGIT7_REG - i;
+        xmit[21] = (uint8_t) (_fb[2][i] >> 8);
+        xmit[22] = DIGIT7_REG - i;
+        xmit[23] = (uint8_t) (_fb[2][i] >> 0);
+        xmit[24] = DIGIT7_REG - i;
+        xmit[25] = (uint8_t) (_fb[3][i] >> 24);
+        xmit[26] = DIGIT7_REG - i;
+        xmit[27] = (uint8_t) (_fb[3][i] >> 16);
+        xmit[28] = DIGIT7_REG - i;
+        xmit[29] = (uint8_t) (_fb[3][i] >> 8);
+        xmit[30] = DIGIT7_REG - i;
+        xmit[31] = (uint8_t) (_fb[3][i] >> 0);
 
-void LedMatrix::cylon(void)
-{
-    setMode(MOUTH_CYLON);
-}
-
-void LedMatrix::speak(void)
-{
-    setMode(MOUTH_SPEAK);
-}
-
-void LedMatrix::displayText(const char *text, bool scroll, unsigned int speed)
-{
-    _text = text;
-    _scroll = scroll;
-    _speed = speed;
-    setMode(MOUTH_TEXT);
+        writeMax7219(xmit, sizeof(xmit));
+    }
 }
 
 /*

@@ -1,3 +1,6 @@
 [submodule "libmeshtastic"]
 	path = libmeshtastic
 	url = https://github.com/samurai0000000/libmeshtastic.git
+[submodule "font8x8"]
+	path = font8x8
+	url = https://github.com/dhepper/font8x8.git

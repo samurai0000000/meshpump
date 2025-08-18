@@ -22,17 +22,11 @@ public:
     unsigned int intensity(void) const;
     void setIntensity(unsigned int intensity);
 
-    void draw(const uint32_t fb[8]);
+    void setText(unsigned int layer, const string &text);
 
-    unsigned int mode(void) const;
-    void setMode(unsigned int mode);
-    void beh(void);
-    void smile(void);
-    void cylon(void);
-    void speak(void);
-    void displayText(const char *text,
-                     bool scroll = true,
-                     unsigned int speed = 1);
+    void draw(unsigned int layer, const uint32_t fb[8]);
+    void draw(unsigned int i, unsigned int j, const uint8_t fb[8]);
+    void repaint(void);
 
 private:
 
@@ -40,31 +34,21 @@ private:
     void run(void);
 
     int writeMax7219(const void *data, size_t size);
-    int writeMax7219(uint8_t reg, uint8_t data) const;
+    int writeMax7219(uint8_t reg, uint8_t data);
 
-    void behCycle(unsigned int cycle);
-    void smileCycle(unsigned int cycle);
-    void cylonCycle(unsigned int cycle);
-    void speakCycle(unsigned int cycle);
-    void textCycle(unsigned int cycle);
-
-#if defined(USE_PIGPIO)
     int _handle;
-#else
     int _fd;
-#endif
     unsigned int _intensity;
-    uint32_t _fb[8];
-
-    int _mode;
-    std::string _text;
-    bool _scroll;
-    unsigned int _speed;
+    uint32_t _fb[4][8];
 
     bool _running;
     pthread_t _thread;
     pthread_mutex_t _mutex;
     pthread_cond_t _cond;
+
+
+    string _text[4];
+    int _pos[4];
 
 };
 

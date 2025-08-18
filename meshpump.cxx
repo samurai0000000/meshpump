@@ -282,6 +282,10 @@ int main(int argc, char **argv)
     }
 
     leds = make_shared<LedMatrix>();
+    leds->setText(0, copyright);
+    leds->setText(1, built);
+    leds->setText(2, version);
+    leds->setText(3, banner);
 
     /* ------- */
 
