@@ -25,6 +25,14 @@ public:
 
     void join(void);
 
+    bool isFishPumpOn(void) const;
+    void setFishPumpOnOff(bool on);
+
+    bool isUpPumpOn(void) const;
+    void setUpPumpOnOff(bool on);
+    unsigned int getUpPumpAutoCutoffSec(void) const;
+    void setUpPumpAutoCutoffSec(unsigned int seconds);
+
 protected:
 
     // Extend MeshClient
@@ -47,7 +55,15 @@ protected:
 
     // Extend HomeChat
 
+    virtual string handleUnknown(uint32_t node_num, string &message);
+    virtual string handleLed(uint32_t node_num, string &message);
     virtual int vprintf(const char *format, va_list ap) const;
+
+private:
+
+    bool _fishPump;
+    bool _upPump;
+    unsigned int _upPumpAutoCutoffSec;
 
 };
 

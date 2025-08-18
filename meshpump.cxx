@@ -15,9 +15,9 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
-#include <MeshShell.hxx>
 #include "MeshPump.hxx"
 #include "LedMatrix.hxx"
+#include <MeshPumpShell.hxx>
 #include "version.h"
 
 using namespace libconfig;
@@ -25,9 +25,9 @@ using namespace libconfig;
 #define DEFAULT_DEVICE "/dev/ttyAMA0"
 
 shared_ptr<MeshPump> pump = NULL;
-shared_ptr<MeshShell> stdioShell = NULL;
-shared_ptr<MeshShell> netShell = NULL;
-shared_ptr<LedMatrix> leds = NULL;
+shared_ptr<LedMatrix> ledMatrix = NULL;
+static shared_ptr<MeshPumpShell> stdioShell = NULL;
+static shared_ptr<MeshPumpShell> netShell = NULL;
 
 void sighandler(int signum)
 {
@@ -42,8 +42,8 @@ void sighandler(int signum)
     if (netShell) {
         netShell->detach();
     }
-    if (leds) {
-        leds->stop();
+    if (ledMatrix) {
+        ledMatrix->stop();
     }
 }
 
@@ -259,7 +259,7 @@ int main(int argc, char **argv)
     pump->enableLogStderr(log);
 
     if (port != 0) {
-        netShell = make_shared<MeshShell>();
+        netShell = make_shared<MeshPumpShell>();
         netShell->setBanner(banner);
         netShell->setVersion(version);
         netShell->setBuilt(built);
@@ -271,7 +271,7 @@ int main(int argc, char **argv)
 
 
     if (useStdioShell) {
-        stdioShell = make_shared<MeshShell>();
+        stdioShell = make_shared<MeshPumpShell>();
         stdioShell->setBanner(banner);
         stdioShell->setVersion(version);
         stdioShell->setBuilt(built);
@@ -281,11 +281,11 @@ int main(int argc, char **argv)
         stdioShell->attachStdio();
     }
 
-    leds = make_shared<LedMatrix>();
-    leds->setText(0, copyright);
-    leds->setText(1, built);
-    leds->setText(2, version);
-    leds->setText(3, banner);
+    ledMatrix = make_shared<LedMatrix>();
+    ledMatrix->setText(0, copyright);
+    ledMatrix->setText(1, built);
+    ledMatrix->setText(2, version);
+    ledMatrix->setText(3, banner);
 
     /* ------- */
 
@@ -298,8 +298,8 @@ int main(int argc, char **argv)
     if (netShell) {
         netShell->join();
     }
-    if (leds) {
-        leds->join();
+    if (ledMatrix) {
+        ledMatrix->join();
     }
 
     cout << "Good-bye!" << endl;

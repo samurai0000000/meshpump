@@ -4,7 +4,7 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-project(meshpump VERSION 1.3.1 LANGUAGES C CXX ASM)
+project(meshpump VERSION 1.3.2 LANGUAGES C CXX ASM)
 
 add_subdirectory(libmeshtastic)
 
@@ -49,7 +49,12 @@ configure_file(
   @ONLY
   )
 
-add_executable(meshpump meshpump.cxx MeshPump.cxx LedMatrix.cxx)
+add_executable(meshpump
+  meshpump.cxx
+  MeshPump.cxx
+  LedMatrix.cxx
+  MeshPumpShell.cxx
+  )
 target_include_directories(meshpump PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(meshpump PRIVATE ${MOSQUITTO_INCLUDE_DIR})
 target_link_libraries(meshpump PRIVATE
