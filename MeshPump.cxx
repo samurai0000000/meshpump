@@ -83,7 +83,7 @@ bool MeshPump::loadNvm(void)
 {
     bool result;
 
-    result = MeshNVM::loadNvm();
+    result = MeshNvm::loadNvm();
 
     return result;
 }
@@ -92,7 +92,7 @@ bool MeshPump::saveNvm(void)
 {
     bool result;
 
-    result = MeshNVM::saveNvm();
+    result = MeshNvm::saveNvm();
 
     return result;
 }

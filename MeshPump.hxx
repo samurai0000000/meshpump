@@ -9,13 +9,13 @@
 
 #include <LibMeshtastic.hxx>
 #include <HomeChat.hxx>
-#include <MeshNVM.hxx>
+#include <MeshNvm.hxx>
 
 using namespace std;
 
 class MqttClient;
 
-class MeshPump : public MeshClient, public MeshNVM, public HomeChat,
+class MeshPump : public MeshClient, public MeshNvm, public HomeChat,
                  public enable_shared_from_this<MeshPump> {
 
 public:
@@ -47,7 +47,7 @@ protected:
 
 public:
 
-    // Extend MeshNVM
+    // Extend MeshNvm
 
     virtual bool loadNvm(void);
     virtual bool saveNvm(void);

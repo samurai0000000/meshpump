@@ -255,6 +255,7 @@ int main(int argc, char **argv)
     }
 
     pump->setClient(pump);
+    pump->setNvm(pump);
     pump->setVerbose(verbose);
     pump->enableLogStderr(log);
 
@@ -265,7 +266,7 @@ int main(int argc, char **argv)
         netShell->setBuilt(built);
         netShell->setCopyright(copyright);
         netShell->setClient(pump);
-        netShell->setNVM(pump);
+        netShell->setNvm(pump);
         netShell->bindPort(port);
     }
 
@@ -277,7 +278,7 @@ int main(int argc, char **argv)
         stdioShell->setBuilt(built);
         stdioShell->setCopyright(copyright);
         stdioShell->setClient(pump);
-        stdioShell->setNVM(pump);
+        stdioShell->setNvm(pump);
         stdioShell->attachStdio();
     }
 
