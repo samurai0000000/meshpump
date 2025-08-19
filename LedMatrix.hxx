@@ -7,6 +7,10 @@
 #ifndef LEDMATRIX_HXX
 #define LEDMATRIX_HXX
 
+#include <memory>
+#include <mutex>
+#include <thread>
+
 using namespace std;
 
 class LedMatrix {
@@ -16,6 +20,7 @@ public:
     LedMatrix();
     ~LedMatrix();
 
+    void start(void);
     void stop(void);
     void join(void);
 
@@ -44,10 +49,8 @@ private:
     uint32_t _fb[4][8];
 
     bool _running;
-    pthread_t _thread;
-    pthread_mutex_t _mutex;
-    pthread_cond_t _cond;
-
+    shared_ptr<thread> _thread;
+    mutex _mutex;
 
     string _text[4];
     int _pos[4];

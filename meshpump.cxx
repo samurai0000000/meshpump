@@ -287,6 +287,7 @@ int main(int argc, char **argv)
     ledMatrix->setText(1, built);
     ledMatrix->setText(2, version);
     ledMatrix->setText(3, banner);
+    ledMatrix->start();
 
     /* ------- */
 

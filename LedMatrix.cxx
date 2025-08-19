@@ -66,38 +66,38 @@ LedMatrix::LedMatrix()
     setText(1, "");
     setText(2, "");
     setText(3, "");
-
-    _running = true;
-    pthread_mutex_init(&_mutex, NULL);
-    pthread_cond_init(&_cond, NULL);
-    pthread_create(&_thread, NULL, LedMatrix::thread_func, this);
-    pthread_setname_np(_thread, "R'LedMatrix");
 }
 
 LedMatrix::~LedMatrix()
 {
-    _running = false;
-    pthread_cond_broadcast(&_cond);
-    pthread_join(_thread, NULL);
+    stop();
 
     if (_handle >= 0) {
         spi_close(_handle);
         _handle = -1;
     }
+}
 
-    pthread_mutex_destroy(&_mutex);
-    pthread_cond_destroy(&_cond);
+void LedMatrix::start(void)
+{
+    if (_thread == NULL) {
+        _running = true;
+        _thread = make_shared<thread>(LedMatrix::thread_func, this);
+    }
 }
 
 void LedMatrix::stop(void)
 {
     _running = false;
-    pthread_cond_broadcast(&_cond);
 }
 
 void LedMatrix::join(void)
 {
-    pthread_join(_thread, NULL);
+    if (_thread != NULL) {
+        if (_thread->joinable()) {
+            _thread->join();
+        }
+    }
 }
 
 void *LedMatrix::thread_func(void *args)
@@ -109,33 +109,12 @@ void *LedMatrix::thread_func(void *args)
     return NULL;
 }
 
-static struct timespec *timespecadd(struct timespec *result,
-                                    struct timespec *ts1,
-                                    struct timespec *ts2) {
-
-    result->tv_nsec = ts1->tv_nsec + ts2->tv_nsec;
-    result->tv_sec = ts1->tv_sec + ts2->tv_sec;
-
-    if (result->tv_nsec >= 1000000000) {
-        result->tv_sec += result->tv_nsec / 1000000000;
-        result->tv_nsec %= 1000000000;
-    }
-
-    return result;
-}
-
 void LedMatrix::run(void)
 {
-    struct timespec ts, tloop;
     unsigned int cycle;
     unsigned int i;
 
-    tloop.tv_sec = 0;
-    tloop.tv_nsec = 250000000;
-
     for (cycle = 0; _running; cycle++) {
-        clock_gettime(CLOCK_REALTIME, &ts);
-        timespecadd(&ts, &tloop, &ts);
 
         for (i = 0; i < 4; i++) {
             if (((_pos[i] + 0) >= 0) &&
@@ -177,10 +156,7 @@ void LedMatrix::run(void)
         }
 
         repaint();
-
-        pthread_mutex_lock(&_mutex);
-        pthread_cond_timedwait(&_cond, &_mutex, &ts);
-        pthread_mutex_unlock(&_mutex);
+        usleep(250000);
     }
 
     writeMax7219(SHUTDOWN_REG, 0);
@@ -190,9 +166,7 @@ int LedMatrix::writeMax7219(const void *data, size_t size)
 {
     int ret;
 
-    pthread_mutex_lock(&_mutex);
     ret = spi_write(_handle, (char *) data, size);
-    pthread_mutex_unlock(&_mutex);
     if (ret != (int) size) {
         cerr << "spi_write failed!" << endl;
     }
@@ -211,9 +185,7 @@ int LedMatrix::writeMax7219(uint8_t reg, uint8_t data)
         xmit[i * 2 + 1] = data;
     }
 
-    pthread_mutex_lock(&_mutex);
     ret = spi_write(_handle, xmit, sizeof(xmit));
-    pthread_mutex_unlock(&_mutex);
     if (ret != sizeof(xmit)) {
         cerr << "spi_write failed!" << endl;
     }
@@ -234,18 +206,18 @@ void LedMatrix::setIntensity(unsigned int intensity)
 
 void LedMatrix::clear(void)
 {
-    pthread_mutex_lock(&_mutex);
+    _mutex.lock();
     _text[0].clear();
     _text[1].clear();
     _text[2].clear();
     _text[3].clear();
     bzero(_fb, sizeof(_fb));
-    pthread_mutex_unlock(&_mutex);
+    _mutex.unlock();
 }
 
 void LedMatrix::setText(unsigned int layer, const string &text)
 {
-    pthread_mutex_lock(&_mutex);
+    _mutex.lock();
     _text[layer] = text;
     if (_welcome[layer].empty()) {
         _welcome[layer] = text;
@@ -255,7 +227,7 @@ void LedMatrix::setText(unsigned int layer, const string &text)
     } else {
         _pos[layer] = -4;
     }
-    pthread_mutex_unlock(&_mutex);
+    _mutex.unlock();
 }
 
 void LedMatrix::setWelcomeText(void)
@@ -268,28 +240,29 @@ void LedMatrix::setWelcomeText(void)
 
 void LedMatrix::draw(unsigned int layer, const uint32_t fb[8])
 {
-    pthread_mutex_lock(&_mutex);
+    _mutex.lock();
     for (unsigned int i = 0; i < 8; i++) {
         _fb[layer][i] = fb[i];
     }
-    pthread_mutex_unlock(&_mutex);
+    _mutex.unlock();
 }
 
 void LedMatrix::draw(unsigned int i, unsigned int j, const uint8_t fb[8])
 {
     uint8_t *one = ((uint8_t *) _fb[i]);
 
-    pthread_mutex_lock(&_mutex);
+    _mutex.lock();
     for (unsigned int k = 0; k < 8; k++) {
         one[k * 4 + j] = fb[k];
     }
-    pthread_mutex_unlock(&_mutex);
+    _mutex.unlock();
 }
 
 void LedMatrix::repaint(void)
 {
     uint8_t xmit[MAX7219_COUNT * 2];
 
+    _mutex.lock();
     for (unsigned int i = 0; i < 8; i++) {
         xmit[ 0] = DIGIT7_REG - i;
         xmit[ 1] = (uint8_t) (_fb[0][i] >> 24);
@@ -326,6 +299,7 @@ void LedMatrix::repaint(void)
 
         writeMax7219(xmit, sizeof(xmit));
     }
+    _mutex.unlock();
 }
 
 /*
