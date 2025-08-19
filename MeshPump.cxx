@@ -141,7 +141,11 @@ string MeshPump::handleLed(uint32_t node_num, string &message)
     first_word = message.substr(0, message.find(' '));
     toLowercase(first_word);
 
-    if (first_word == "3") {
+    if (first_word == "blank") {
+        ledMatrix->clear();
+    } else if (first_word == "welcome") {
+        ledMatrix->setWelcomeText();
+    } else if (first_word == "3") {
         message = message.substr(first_word.size());
         trimWhitespace(message);
         ledMatrix->setText(3, message);

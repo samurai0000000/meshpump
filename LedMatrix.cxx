@@ -232,16 +232,38 @@ void LedMatrix::setIntensity(unsigned int intensity)
     writeMax7219(INTENSITY_REG, _intensity);
 }
 
+void LedMatrix::clear(void)
+{
+    pthread_mutex_lock(&_mutex);
+    _text[0].clear();
+    _text[1].clear();
+    _text[2].clear();
+    _text[3].clear();
+    bzero(_fb, sizeof(_fb));
+    pthread_mutex_unlock(&_mutex);
+}
+
 void LedMatrix::setText(unsigned int layer, const string &text)
 {
     pthread_mutex_lock(&_mutex);
     _text[layer] = text;
+    if (_welcome[layer].empty()) {
+        _welcome[layer] = text;
+    }
     if (text.size() <= 4) {
         _pos[layer] = 0;
     } else {
         _pos[layer] = -4;
     }
     pthread_mutex_unlock(&_mutex);
+}
+
+void LedMatrix::setWelcomeText(void)
+{
+    setText(0, _welcome[0]);
+    setText(1, _welcome[1]);
+    setText(2, _welcome[2]);
+    setText(3, _welcome[3]);
 }
 
 void LedMatrix::draw(unsigned int layer, const uint32_t fb[8])

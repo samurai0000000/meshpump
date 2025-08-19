@@ -22,7 +22,9 @@ public:
     unsigned int intensity(void) const;
     void setIntensity(unsigned int intensity);
 
+    void clear(void);
     void setText(unsigned int layer, const string &text);
+    void setWelcomeText(void);
 
     void draw(unsigned int layer, const uint32_t fb[8]);
     void draw(unsigned int i, unsigned int j, const uint8_t fb[8]);
@@ -49,6 +51,8 @@ private:
 
     string _text[4];
     int _pos[4];
+
+    string _welcome[4];
 
 };
 
