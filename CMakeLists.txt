@@ -4,7 +4,7 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-project(meshpump VERSION 1.3.4 LANGUAGES C CXX ASM)
+project(meshpump VERSION 1.3.5 LANGUAGES C CXX ASM)
 
 add_subdirectory(libmeshtastic)
 

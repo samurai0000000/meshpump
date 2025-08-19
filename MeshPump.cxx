@@ -217,6 +217,8 @@ string MeshPump::handlePump(uint32_t node_num, string &message)
         try {
             cutoff = stoi(third_word);
         } catch (const invalid_argument &e) {
+            reply = "cutoff '" + third_word + "' argument is invalid!";
+            goto done;
         }
 
         if (cutoff > 120) {

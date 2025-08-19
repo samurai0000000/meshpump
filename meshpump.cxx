@@ -24,7 +24,7 @@ using namespace libconfig;
 
 #define DEFAULT_DEVICE "/dev/ttyAMA0"
 
-shared_ptr<MeshPump> pump = NULL;
+shared_ptr<MeshPump> meshpump = NULL;
 shared_ptr<LedMatrix> ledMatrix = NULL;
 static shared_ptr<MeshPumpShell> stdioShell = NULL;
 static shared_ptr<MeshPumpShell> netShell = NULL;
@@ -33,8 +33,8 @@ void sighandler(int signum)
 {
     (void)(signum);
 
-    if (pump) {
-        pump->detach();
+    if (meshpump) {
+        meshpump->detach();
     }
     if (stdioShell) {
         stdioShell->detach();
@@ -248,16 +248,16 @@ int main(int argc, char **argv)
     signal(SIGINT, sighandler);
     signal(SIGPIPE, SIG_IGN);
 
-    pump = make_shared<MeshPump>();
-    if (pump->attachSerial(device) == false) {
+    meshpump = make_shared<MeshPump>();
+    if (meshpump->attachSerial(device) == false) {
         cerr << "Unable to attch to " << device << endl;
         exit(EXIT_FAILURE);
     }
 
-    pump->setClient(pump);
-    pump->setNvm(pump);
-    pump->setVerbose(verbose);
-    pump->enableLogStderr(log);
+    meshpump->setClient(meshpump);
+    meshpump->setNvm(meshpump);
+    meshpump->setVerbose(verbose);
+    meshpump->enableLogStderr(log);
 
     if (port != 0) {
         netShell = make_shared<MeshPumpShell>();
@@ -265,8 +265,8 @@ int main(int argc, char **argv)
         netShell->setVersion(version);
         netShell->setBuilt(built);
         netShell->setCopyright(copyright);
-        netShell->setClient(pump);
-        netShell->setNvm(pump);
+        netShell->setClient(meshpump);
+        netShell->setNvm(meshpump);
         netShell->bindPort(port);
     }
 
@@ -277,8 +277,8 @@ int main(int argc, char **argv)
         stdioShell->setVersion(version);
         stdioShell->setBuilt(built);
         stdioShell->setCopyright(copyright);
-        stdioShell->setClient(pump);
-        stdioShell->setNvm(pump);
+        stdioShell->setClient(meshpump);
+        stdioShell->setNvm(meshpump);
         stdioShell->attachStdio();
     }
 
@@ -290,8 +290,8 @@ int main(int argc, char **argv)
 
     /* ------- */
 
-    if (pump) {
-        pump->join();
+    if (meshpump) {
+        meshpump->join();
     }
     if (stdioShell) {
         stdioShell->join();
