@@ -238,22 +238,11 @@ void LedMatrix::setWelcomeText(void)
     setText(3, _welcome[3]);
 }
 
-void LedMatrix::draw(unsigned int layer, const uint32_t fb[8])
-{
-    _mutex.lock();
-    for (unsigned int i = 0; i < 8; i++) {
-        _fb[layer][i] = fb[i];
-    }
-    _mutex.unlock();
-}
-
 void LedMatrix::draw(unsigned int i, unsigned int j, const uint8_t fb[8])
 {
-    uint8_t *one = ((uint8_t *) _fb[i]);
-
     _mutex.lock();
     for (unsigned int k = 0; k < 8; k++) {
-        one[k * 4 + j] = fb[k];
+        _fb[i][j][k] = fb[k];
     }
     _mutex.unlock();
 }
@@ -263,39 +252,13 @@ void LedMatrix::repaint(void)
     uint8_t xmit[MAX7219_COUNT * 2];
 
     _mutex.lock();
-    for (unsigned int i = 0; i < 8; i++) {
-        xmit[ 0] = DIGIT7_REG - i;
-        xmit[ 1] = (uint8_t) (_fb[0][i] >> 24);
-        xmit[ 2] = DIGIT7_REG - i;
-        xmit[ 3] = (uint8_t) (_fb[0][i] >> 16);
-        xmit[ 4] = DIGIT7_REG - i;
-        xmit[ 5] = (uint8_t) (_fb[0][i] >> 8);
-        xmit[ 6] = DIGIT7_REG - i;
-        xmit[ 7] = (uint8_t) (_fb[0][i] >> 0);
-        xmit[ 8] = DIGIT7_REG - i;
-        xmit[ 9] = (uint8_t) (_fb[1][i] >> 24);
-        xmit[10] = DIGIT7_REG - i;
-        xmit[11] = (uint8_t) (_fb[1][i] >> 16);
-        xmit[12] = DIGIT7_REG - i;
-        xmit[13] = (uint8_t) (_fb[1][i] >> 8);
-        xmit[14] = DIGIT7_REG - i;
-        xmit[15] = (uint8_t) (_fb[1][i] >> 0);
-        xmit[16] = DIGIT7_REG - i;
-        xmit[17] = (uint8_t) (_fb[2][i] >> 24);
-        xmit[18] = DIGIT7_REG - i;
-        xmit[19] = (uint8_t) (_fb[2][i] >> 16);
-        xmit[20] = DIGIT7_REG - i;
-        xmit[21] = (uint8_t) (_fb[2][i] >> 8);
-        xmit[22] = DIGIT7_REG - i;
-        xmit[23] = (uint8_t) (_fb[2][i] >> 0);
-        xmit[24] = DIGIT7_REG - i;
-        xmit[25] = (uint8_t) (_fb[3][i] >> 24);
-        xmit[26] = DIGIT7_REG - i;
-        xmit[27] = (uint8_t) (_fb[3][i] >> 16);
-        xmit[28] = DIGIT7_REG - i;
-        xmit[29] = (uint8_t) (_fb[3][i] >> 8);
-        xmit[30] = DIGIT7_REG - i;
-        xmit[31] = (uint8_t) (_fb[3][i] >> 0);
+    for (unsigned int k = 0; k < 8; k++) {
+        for (unsigned int i = 0; i < 4; i++) {
+            for (unsigned int j = 0; j < 4; j++) {
+                xmit[(((i * 4) + j) * 2) + 0] = DIGIT7_REG - k;
+                xmit[(((i * 4) + j) * 2) + 1] = _fb[i][3 - j][k];
+            }
+        }
 
         writeMax7219(xmit, sizeof(xmit));
     }

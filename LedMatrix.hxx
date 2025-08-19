@@ -31,7 +31,6 @@ public:
     void setText(unsigned int layer, const string &text);
     void setWelcomeText(void);
 
-    void draw(unsigned int layer, const uint32_t fb[8]);
     void draw(unsigned int i, unsigned int j, const uint8_t fb[8]);
     void repaint(void);
 
@@ -46,7 +45,7 @@ private:
     int _handle;
     int _fd;
     unsigned int _intensity;
-    uint32_t _fb[4][8];
+    uint8_t _fb[4][4][8];
 
     bool _running;
     shared_ptr<thread> _thread;
