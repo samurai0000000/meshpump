@@ -27,16 +27,6 @@
     PI_SPI_FLAGS_RESVD(0)    |              \
     PI_SPI_FLAGS_CSPOLS(0)   |              \
     PI_SPI_FLAGS_MODE(0)
-#define MAX7219_COUNT      (4 * 4)
-
-/*
- * MAX 7219:
- * https://www.sparkfun.com/datasheets/Components/General/COM-09622-MAX7219-MAX7221.pdf
- *
- * yellow    din   mosi(10)
- * green     cs    spi_ce0(8)
- * blue      clk   spi_clk(11)
- */
 
 LedMatrix::LedMatrix()
   : _intensity(1),
@@ -112,46 +102,27 @@ void *LedMatrix::thread_func(void *args)
 void LedMatrix::run(void)
 {
     unsigned int cycle;
-    unsigned int i;
+    int x, y;
 
     for (cycle = 0; _running; cycle++) {
 
-        for (i = 0; i < 4; i++) {
-            if (((_pos[i] + 0) >= 0) &&
-                ((_pos[i] + 0) < (int) _text[i].size())) {
-                draw(i, 0, (const uint8_t *)
-                     font8x8_basic[_text[i][_pos[i] + 0] % 128]);
-            } else {
-                draw(i, 0, (const uint8_t *) font8x8_basic[0]);
-            }
-            if (((_pos[i] + 1) >= 0) &&
-                (_pos[i] + 1) < (int) _text[i].size()) {
-                draw(i, 1, (const uint8_t *)
-                     font8x8_basic[_text[i][_pos[i] + 1] % 128]);
-            } else {
-                draw(i, 1, (const uint8_t *) font8x8_basic[0]);
-            }
-            if (((_pos[i] + 2) >= 0) &&
-                (_pos[i] + 2) < (int) _text[i].size()) {
-                draw(i, 2, (const uint8_t *)
-                     font8x8_basic[_text[i][_pos[i] + 2] % 128]);
-            } else {
-                draw(i, 2, (const uint8_t *) font8x8_basic[0]);
-            }
-            if (((_pos[i] + 3) >= 0) &&
-                (_pos[i] + 3) < (int) _text[i].size()) {
-                draw(i, 3, (const uint8_t *)
-                     font8x8_basic[_text[i][_pos[i] + 3] % 128]);
-            } else {
-                draw(i, 3, (const uint8_t *) font8x8_basic[0]);
+        for (y = 0; y < MAX7219_Y_COUNT; y++) {
+            for (x = 0; x < MAX7219_X_COUNT; x++) {
+                if (((_pos[y] + x) >= 0) &&
+                    ((_pos[y] + x) < (int) _text[y].size())) {
+                    draw(y, x, (const uint8_t *)
+                         font8x8_basic[_text[y][_pos[y] + x] % 128]);
+                } else {
+                    draw(y, x, (const uint8_t *) font8x8_basic[0]);
+                }
             }
 
-            if (_text[i].size() > 4) {
-                _pos[i]++;
+            if (_text[y].size() > MAX7219_X_COUNT) {
+                _pos[y]++;
             }
 
-            if (_pos[i] > (int) _text[i].size()) {
-                _pos[i] = -4;
+            if (_pos[y] > (int) _text[y].size()) {
+                _pos[y] = -MAX7219_X_COUNT;
             }
         }
 
@@ -178,9 +149,9 @@ int LedMatrix::writeMax7219(uint8_t reg, uint8_t data)
 {
     int ret;
     unsigned int i;
-    char xmit[MAX7219_COUNT * 2];
+    char xmit[MAX7219_X_COUNT * MAX7219_Y_COUNT * 2];
 
-    for (i = 0; i < MAX7219_COUNT; i++) {
+    for (i = 0; i < (MAX7219_X_COUNT * MAX7219_Y_COUNT); i++) {
         xmit[i * 2 + 0] = reg;
         xmit[i * 2 + 1] = data;
     }
@@ -207,56 +178,71 @@ void LedMatrix::setIntensity(unsigned int intensity)
 void LedMatrix::clear(void)
 {
     _mutex.lock();
-    _text[0].clear();
-    _text[1].clear();
-    _text[2].clear();
-    _text[3].clear();
+    for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
+        _text[y].clear();
+    }
     bzero(_fb, sizeof(_fb));
     _mutex.unlock();
 }
 
-void LedMatrix::setText(unsigned int layer, const string &text)
+void LedMatrix::setText(unsigned int y, const string &text)
 {
-    _mutex.lock();
-    _text[layer] = text;
-    if (_welcome[layer].empty()) {
-        _welcome[layer] = text;
+    if (y >= MAX7219_Y_COUNT) {
+        return;
     }
-    if (text.size() <= 4) {
-        _pos[layer] = 0;
+
+    _mutex.lock();
+    _text[y] = text;
+    if (_welcome[y].empty()) {
+        _welcome[y] = text;
+    }
+    if (text.size() <= MAX7219_X_COUNT) {
+        _pos[y] = 0;
     } else {
-        _pos[layer] = -4;
+        _pos[y] = -MAX7219_X_COUNT;
     }
     _mutex.unlock();
 }
 
 void LedMatrix::setWelcomeText(void)
 {
-    setText(0, _welcome[0]);
-    setText(1, _welcome[1]);
-    setText(2, _welcome[2]);
-    setText(3, _welcome[3]);
+    for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
+        setText(y, _welcome[y]);
+    }
 }
 
-void LedMatrix::draw(unsigned int i, unsigned int j, const uint8_t fb[8])
+void LedMatrix::draw(unsigned int y, unsigned int x, const uint8_t fb[8])
 {
+    if (y >= MAX7219_Y_COUNT) {
+        return;
+    }
+
+    if (x >= MAX7219_X_COUNT) {
+        return;
+    }
+
+    if (fb == NULL) {
+        return;
+    }
+
     _mutex.lock();
-    for (unsigned int k = 0; k < 8; k++) {
-        _fb[i][j][k] = fb[k];
+    for (unsigned int i = 0; i < 8; i++) {
+        _fb[y][x][i] = fb[i];
     }
     _mutex.unlock();
 }
 
 void LedMatrix::repaint(void)
 {
-    uint8_t xmit[MAX7219_COUNT * 2];
+    uint8_t xmit[MAX7219_X_COUNT * MAX7219_Y_COUNT * 2];
 
     _mutex.lock();
-    for (unsigned int k = 0; k < 8; k++) {
-        for (unsigned int i = 0; i < 4; i++) {
-            for (unsigned int j = 0; j < 4; j++) {
-                xmit[(((i * 4) + j) * 2) + 0] = DIGIT7_REG - k;
-                xmit[(((i * 4) + j) * 2) + 1] = _fb[i][3 - j][k];
+    for (unsigned int i = 0; i < 8; i++) {
+        for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
+            for (unsigned int x = 0; x < MAX7219_X_COUNT; x++) {
+                xmit[(((y * MAX7219_Y_COUNT) + x) * 2) + 0] = DIGIT7_REG - i;
+                xmit[(((y * MAX7219_Y_COUNT) + x) * 2) + 1] =
+                    _fb[y][MAX7219_X_COUNT - 1 - x][i];
             }
         }
 

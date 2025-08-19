@@ -11,6 +11,9 @@
 #include <mutex>
 #include <thread>
 
+#define MAX7219_X_COUNT      4
+#define MAX7219_Y_COUNT      4
+
 using namespace std;
 
 class LedMatrix {
@@ -51,10 +54,10 @@ private:
     shared_ptr<thread> _thread;
     mutex _mutex;
 
-    string _text[4];
-    int _pos[4];
+    string _text[MAX7219_Y_COUNT];
+    int _pos[MAX7219_X_COUNT];
 
-    string _welcome[4];
+    string _welcome[MAX7219_Y_COUNT];
 
 };
 
