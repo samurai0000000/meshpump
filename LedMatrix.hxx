@@ -34,7 +34,13 @@ public:
     void setText(unsigned int layer, const string &text);
     void setWelcomeText(void);
 
-    void draw(unsigned int i, unsigned int j, const uint8_t fb[8]);
+    void draw(unsigned int y, unsigned int x, const uint8_t fb[8]);
+    void drawSL(unsigned int y, unsigned int x,
+                unsigned int shift, bool clear,
+                const uint8_t fb[8]);
+    void drawSR(unsigned int y, unsigned int x,
+                unsigned int shift, bool clear,
+                const uint8_t fb[8]);
     void repaint(void);
 
 private:

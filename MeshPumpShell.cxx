@@ -39,6 +39,7 @@ int MeshPumpShell::led(int argc, char **argv)
         goto done;
     } else if ((argc ==2) && (strcmp(argv[1], "welcome") == 0)) {
         ledMatrix->setWelcomeText();
+        goto done;
     } else if ((argc > 2) && strcmp(argv[1], "0") == 0) {
         startArg = 2;
         layer = 0;

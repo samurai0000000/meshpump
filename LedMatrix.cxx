@@ -102,32 +102,65 @@ void *LedMatrix::thread_func(void *args)
 void LedMatrix::run(void)
 {
     unsigned int cycle;
-    int x, y;
+    int x, y, slice;
+    int i;
+    char cc, nc;
+    const uint8_t *cl, *nl;
+    bool scroll;
 
     for (cycle = 0; _running; cycle++) {
 
+        slice = cycle % 8;
+
         for (y = 0; y < MAX7219_Y_COUNT; y++) {
+
+            if (_text[y].size() <= MAX7219_X_COUNT) {
+                scroll = false;
+            } else {
+                scroll = true;
+            }
+
             for (x = 0; x < MAX7219_X_COUNT; x++) {
-                if (((_pos[y] + x) >= 0) &&
-                    ((_pos[y] + x) < (int) _text[y].size())) {
-                    draw(y, x, (const uint8_t *)
-                         font8x8_basic[_text[y][_pos[y] + x] % 128]);
+                i = _pos[y] + x;
+
+                if ((i >= 0) && (i < (int) _text[y].size())) {
+                    cc = _text[y][i];
                 } else {
-                    draw(y, x, (const uint8_t *) font8x8_basic[0]);
+                    cc = ' ';
+                }
+
+                if ((i >= -1) && (i < (int) (_text[y].size() - 1))) {
+                    nc = _text[y][i + 1];
+                } else {
+                    nc = ' ';
+                }
+
+                if (!scroll) {
+                    cl = (const uint8_t *) font8x8_basic[cc % 128];
+
+                    draw(y, x, cl);
+                } else {
+                    cl = (const uint8_t *) font8x8_basic[cc % 128];
+                    nl = (const uint8_t *) font8x8_basic[nc % 128];
+
+                    drawSR(y, x, slice, true, cl);
+                    drawSL(y, x, 8 - slice, false, nl);
                 }
             }
 
-            if (_text[y].size() > MAX7219_X_COUNT) {
-                _pos[y]++;
-            }
+            if (slice == 7) {
+                if (_text[y].size() > MAX7219_X_COUNT) {
+                    _pos[y]++;
+                }
 
-            if (_pos[y] > (int) _text[y].size()) {
-                _pos[y] = -MAX7219_X_COUNT;
+                if (_pos[y] > (int) _text[y].size()) {
+                    _pos[y] = -MAX7219_X_COUNT;
+                }
             }
         }
 
         repaint();
-        usleep(250000);
+        usleep(50000);
     }
 
     writeMax7219(SHUTDOWN_REG, 0);
@@ -228,6 +261,68 @@ void LedMatrix::draw(unsigned int y, unsigned int x, const uint8_t fb[8])
     _mutex.lock();
     for (unsigned int i = 0; i < 8; i++) {
         _fb[y][x][i] = fb[i];
+    }
+    _mutex.unlock();
+}
+
+void LedMatrix::drawSL(unsigned int y, unsigned int x,
+                       unsigned int shift, bool clear,
+                       const uint8_t fb[8])
+{
+    if (y >= MAX7219_Y_COUNT) {
+        return;
+    }
+
+    if (x >= MAX7219_X_COUNT) {
+        return;
+    }
+
+    if (shift >= 8) {
+        return;
+    }
+
+    if (fb == NULL) {
+        return;
+    }
+
+    _mutex.lock();
+    for (unsigned int i = 0; i < 8; i++) {
+        if (clear) {
+            _fb[y][x][i] = (fb[i] << shift);
+        } else {
+            _fb[y][x][i] |= (fb[i] << shift);
+        }
+    }
+    _mutex.unlock();
+}
+
+void LedMatrix::drawSR(unsigned int y, unsigned int x,
+                       unsigned int shift, bool clear,
+                       const uint8_t fb[8])
+{
+    if (y >= MAX7219_Y_COUNT) {
+        return;
+    }
+
+    if (x >= MAX7219_X_COUNT) {
+        return;
+    }
+
+    if (shift >= 8) {
+        return;
+    }
+
+    if (fb == NULL) {
+        return;
+    }
+
+    _mutex.lock();
+    for (unsigned int i = 0; i < 8; i++) {
+        if (clear) {
+            _fb[y][x][i] = (fb[i] >> shift);
+        } else {
+            _fb[y][x][i] |= (fb[i] >> shift);
+        }
     }
     _mutex.unlock();
 }
