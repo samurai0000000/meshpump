@@ -9,9 +9,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <pigpiod_if.h>
+#include <climits>
 #include <cstring>
 #include <iostream>
-#include "font8x8/font8x8.h"
+#include <font8x8/font8x8.h>
 #include <max7219_defs.h>
 #include <LedMatrix.hxx>
 
@@ -52,10 +53,11 @@ LedMatrix::LedMatrix()
     writeMax7219(DIGIT6_REG, 0);
     writeMax7219(DIGIT7_REG, 0);
 
-    setText(0, "");
-    setText(1, "");
-    setText(2, "");
-    setText(3, "");
+    setDelay(25);
+    for (unsigned y = 0; y < MAX7219_Y_COUNT; y++) {
+        setText(y, "");
+        setSlowdownFactor(y, y + 1);
+    }
 }
 
 LedMatrix::~LedMatrix()
@@ -107,12 +109,15 @@ void LedMatrix::run(void)
     char cc, nc;
     const uint8_t *cl, *nl;
     bool scroll;
+    time_t tlast, tnow;
+
+    tlast = tnow = time(NULL);
 
     for (cycle = 0; _running; cycle++) {
 
-        slice = cycle % 8;
-
         for (y = 0; y < MAX7219_Y_COUNT; y++) {
+
+            slice = _slice[y];
 
             if (_text[y].size() <= MAX7219_X_COUNT) {
                 scroll = false;
@@ -148,7 +153,16 @@ void LedMatrix::run(void)
                 }
             }
 
+            _counter[y]--;
+
+            if (_counter[y] == 0) {
+                _counter[y] = _reload[y];
+                _slice[y]++;
+            }
+
             if (slice == 7) {
+                _slice[y] = 0;
+
                 if (_text[y].size() > MAX7219_X_COUNT) {
                     _pos[y]++;
                 }
@@ -159,8 +173,21 @@ void LedMatrix::run(void)
             }
         }
 
+        tnow = time(NULL);
+        if (tnow != tlast) {
+            tlast = tnow;
+            for (y = 0; y < MAX7219_Y_COUNT; y++) {
+                if (_ttl[y] > 0) {
+                    _ttl[y]--;
+                    if (_ttl[y] == 0) {
+                        setText(y, _welcome[y], 0);
+                    }
+                }
+            }
+        }
+
         repaint();
-        usleep(50000);
+        usleep(_delay * 1000);
     }
 
     writeMax7219(SHUTDOWN_REG, 0);
@@ -210,15 +237,13 @@ void LedMatrix::setIntensity(unsigned int intensity)
 
 void LedMatrix::clear(void)
 {
-    _mutex.lock();
     for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
-        _text[y].clear();
+        setText(y, "");
     }
-    bzero(_fb, sizeof(_fb));
-    _mutex.unlock();
 }
 
-void LedMatrix::setText(unsigned int y, const string &text)
+void LedMatrix::setText(unsigned int y, const string &text,
+                        unsigned int ttl)
 {
     if (y >= MAX7219_Y_COUNT) {
         return;
@@ -226,13 +251,17 @@ void LedMatrix::setText(unsigned int y, const string &text)
 
     _mutex.lock();
     _text[y] = text;
+    _ttl[y] = ttl;
     if (_welcome[y].empty()) {
         _welcome[y] = text;
+        _ttl[y] = 0;
     }
     if (text.size() <= MAX7219_X_COUNT) {
         _pos[y] = 0;
+        _slice[y] = 0;
     } else {
         _pos[y] = -MAX7219_X_COUNT;
+        _slice[y] = 0;
     }
     _mutex.unlock();
 }
@@ -242,6 +271,64 @@ void LedMatrix::setWelcomeText(void)
     for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
         setText(y, _welcome[y]);
     }
+}
+
+void LedMatrix::setWelcomeText(unsigned int y, const string &text, bool apply)
+{
+    if (y >= MAX7219_Y_COUNT) {
+        return;
+    }
+
+    _mutex.lock();
+    _welcome[y] = text;
+    _mutex.unlock();
+
+    if (apply) {
+        setText(y, text);
+    }
+}
+
+unsigned int LedMatrix::ttl(unsigned int y) const
+{
+    if (y >= MAX7219_Y_COUNT) {
+        return 0;
+    }
+
+    return _ttl[y];
+}
+
+
+void LedMatrix::setDelay(unsigned int ms)
+{
+    _delay = ms;
+}
+
+unsigned int LedMatrix::delay(void) const
+{
+    return _delay;
+}
+
+void LedMatrix::setSlowdownFactor(unsigned int y, unsigned int sf)
+{
+    if (y >= MAX7219_Y_COUNT) {
+        return;
+    }
+
+    if (sf < 1) {
+        sf = 1;
+    }
+
+    _reload[y] = sf;
+    _counter[y] = sf;
+}
+
+unsigned int LedMatrix::slowdownFactor(unsigned int y) const
+{
+    if (y >= MAX7219_Y_COUNT) {
+        return 1;
+    }
+
+    return _reload[y];
 }
 
 void LedMatrix::draw(unsigned int y, unsigned int x, const uint8_t fb[8])

@@ -133,42 +133,97 @@ string MeshPump::handleStatus(uint32_t node_num, string &message)
     return ss.str();
 }
 
+static int getArgY(const char *s)
+{
+    int ret = 0;
+
+    try {
+        ret = stoi(s);
+        if ((ret < 0) || (ret >= MAX7219_Y_COUNT)) {
+            ret = -1;
+        }
+    } catch (const invalid_argument &e) {
+        ret = -1;
+    }
+
+    return ret;
+}
+
 string MeshPump::handleLed(uint32_t node_num, string &message)
 {
-    string reply;
+    stringstream ss;
+    istringstream iss(message);
+    vector<string> tokens;
+    string token;
     string first_word;
+    int y;
 
-    first_word = message.substr(0, message.find(' '));
-    toLowercase(first_word);
+    while (getline(iss, token, ' ')) {
+        tokens.push_back(token);
+    }
 
-    if (first_word == "blank") {
+    if (tokens.size() > 0) {
+        first_word = tokens[0];
+        toLowercase(first_word);
+    }
+
+    if ((first_word == "delay") && (tokens.size() == 2)) {
+        try {
+            int ms = stoi(tokens[1]);
+            if (ms <= 0) {
+                ss << "delay ms=" << tokens[1] << " is invalid!";
+                goto done;
+            }
+
+            ledMatrix->setDelay((unsigned int) ms);
+            ss << "set delay to " << ms << "ms";
+            goto done;
+        } catch (const invalid_argument &e) {
+            ss << "delay ms=" << tokens[2] << " is invalid!";
+            goto done;
+        }
+    } else if ((first_word == "sf") && (tokens.size() == 3) &&
+               ((y = getArgY(tokens[1].c_str())) != -1)) {
+        try {
+            int sf = stoi(tokens[2]);
+            if (sf < 1) {
+                ss << "sf=" << tokens[2] << " is invalid!";
+                goto done;
+            }
+
+            ledMatrix->setSlowdownFactor(y, (unsigned int) sf);
+            ss << "set sf of row " << y << " to " << sf;
+            goto done;
+        } catch (const invalid_argument &e) {
+            ss << "sf=" << tokens[2] << " is invalid!";
+            goto done;
+        }
+    } else if (first_word == "blank") {
         ledMatrix->clear();
     } else if (first_word == "welcome") {
         ledMatrix->setWelcomeText();
-    } else if (first_word == "3") {
+    } else if ((y = getArgY(first_word.c_str())) != -1) {
         message = message.substr(first_word.size());
         trimWhitespace(message);
-        ledMatrix->setText(3, message);
-    } else if (first_word == "2") {
-        message = message.substr(first_word.size());
-        trimWhitespace(message);
-        ledMatrix->setText(2, message);
-    } else if (first_word == "1") {
-        message = message.substr(first_word.size());
-        trimWhitespace(message);
-        ledMatrix->setText(1, message);
-    } else if (first_word == "0") {
-        message = message.substr(first_word.size());
-        trimWhitespace(message);
-        ledMatrix->setText(0, message);
+        ledMatrix->setText(y, message);
     } else {
-        ledMatrix->setText(0, message);
+        ss << "delay: " << to_string(ledMatrix->delay()) << "ms" << endl;
+        for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
+            ss << "row " << to_string(y) << ": ";
+            ss << "ttl=" << to_string(ledMatrix->ttl(y)) << "s, ";
+            ss << "sf=" << to_string(ledMatrix->slowdownFactor(y));
+            if ((y + 1) != MAX7219_Y_COUNT) {
+                ss << endl;
+            }
+        }
+        goto done;
     }
 
-    reply = "Led matrix updated for ";
-    reply += getDisplayName(node_num);
+    ss << "Led matrix updated for " << getDisplayName(node_num);
 
-    return reply;
+done:
+
+    return ss.str();
 }
 
 string MeshPump::handlePump(uint32_t node_num, string &message)

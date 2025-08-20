@@ -23,35 +23,82 @@ MeshPumpShell::~MeshPumpShell()
 
 }
 
+static int getArgY(const char *s)
+{
+    int ret = 0;
+
+    try {
+        ret = stoi(s);
+        if ((ret < 0) || (ret >= MAX7219_Y_COUNT)) {
+            ret = -1;
+        }
+    } catch (const invalid_argument &e) {
+        ret = -1;
+    }
+
+    return ret;
+}
+
 int MeshPumpShell::led(int argc, char **argv)
 {
     int ret = 0;
     string message;
     int startArg = 1;
-    unsigned int layer = 0;
+    int y = 0;
 
-    if (argc < 2) {
+    if (argc == 1) {
+        this->printf("delay: %ums\n", ledMatrix->delay());
+        for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
+            this->printf("row %u: ", y);
+            this->printf("ttl=%us, ", ledMatrix->ttl(y));
+            this->printf("sf=%u\n", ledMatrix->slowdownFactor(y));
+        }
         goto done;
-    }
+    } else if ((argc == 3) && (strcmp(argv[1], "delay") == 0)) {
+        try {
+            int ms = stoi(argv[2]);
+            if (ms <= 0) {
+                ret = -1;
+                this->printf("delay ms=%s is invalid!\n", argv[2]);
+                goto done;
+            }
 
-    if ((argc == 2) && (strcmp(argv[1], "blank") == 0)) {
+            ledMatrix->setDelay((unsigned int) ms);
+            this->printf("set delay to %ums\n", ms);
+            goto done;
+        } catch (const invalid_argument &e) {
+            ret = -1;
+            this->printf("delay ms=%s is invalid!\n", argv[2]);
+            goto done;
+        }
+    } else if ((argc == 4) && (strcmp(argv[1], "sf") == 0) &&
+               ((y = getArgY(argv[2])) != -1)) {
+        try {
+            int sf = stoi(argv[3]);
+            if (sf < 1) {
+                ret = -1;
+                this->printf("sf=%s is invalid!\n", argv[3]);
+                goto done;
+            }
+
+            ledMatrix->setSlowdownFactor(y, (unsigned int) sf);
+            this->printf("set sf of row %u to %u\n", y, sf);
+            goto done;
+        } catch (const invalid_argument &e) {
+            ret = -1;
+            this->printf("sf=%s is invalid!\n", argv[3]);
+            goto done;
+        }
+    } else if ((argc == 2) && (strcmp(argv[1], "blank") == 0)) {
         ledMatrix->clear();
         goto done;
-    } else if ((argc ==2) && (strcmp(argv[1], "welcome") == 0)) {
+    } else if ((argc == 2) && (strcmp(argv[1], "welcome") == 0)) {
         ledMatrix->setWelcomeText();
         goto done;
-    } else if ((argc > 2) && strcmp(argv[1], "0") == 0) {
+    } else if ((argc > 2) && ((y = getArgY(argv[1])) != -1)) {
         startArg = 2;
-        layer = 0;
-    } else if ((argc > 2) && strcmp(argv[1], "1") == 0) {
-        startArg = 2;
-        layer = 1;
-    } else if ((argc > 2) && strcmp(argv[1], "2") == 0) {
-        startArg = 2;
-        layer = 2;
-    } else if ((argc > 2) && strcmp(argv[1], "3") == 0) {
-        startArg = 2;
-        layer = 3;
+    } else {
+        goto done;
     }
 
     for (int i = startArg; i < argc; i++) {
@@ -66,7 +113,7 @@ int MeshPumpShell::led(int argc, char **argv)
     }
 
     if (ledMatrix) {
-        ledMatrix->setText(layer, message);
+        ledMatrix->setText((unsigned int) y, message);
     }
 
 done:

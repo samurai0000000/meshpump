@@ -31,8 +31,16 @@ public:
     void setIntensity(unsigned int intensity);
 
     void clear(void);
-    void setText(unsigned int layer, const string &text);
+    void setText(unsigned int y, const string &text,
+                 unsigned int ttl = 30);
     void setWelcomeText(void);
+    void setWelcomeText(unsigned int y, const string &text,
+                        bool apply = false);
+    unsigned int ttl(unsigned int y) const;
+    void setDelay(unsigned int ms);
+    unsigned int delay(void) const;
+    void setSlowdownFactor(unsigned int y, unsigned int sf);
+    unsigned int slowdownFactor(unsigned int y) const;
 
     void draw(unsigned int y, unsigned int x, const uint8_t fb[8]);
     void drawSL(unsigned int y, unsigned int x,
@@ -61,7 +69,12 @@ private:
     mutex _mutex;
 
     string _text[MAX7219_Y_COUNT];
-    int _pos[MAX7219_X_COUNT];
+    unsigned int _ttl[MAX7219_Y_COUNT];
+    int _pos[MAX7219_Y_COUNT];
+    int _slice[MAX7219_Y_COUNT];
+    unsigned int _counter[MAX7219_Y_COUNT];
+    unsigned int _reload[MAX7219_Y_COUNT];
+    unsigned int _delay;
 
     string _welcome[MAX7219_Y_COUNT];
 
