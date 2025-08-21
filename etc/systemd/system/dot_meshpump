@@ -1,0 +1,4 @@
+device = "/dev/ttyUSB0";
+daemon = 1;
+stdioShell = 0;
+port = 16876;

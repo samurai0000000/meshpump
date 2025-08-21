@@ -1,0 +1,12 @@
+[Unit]
+Description=Mesh Pump
+After=multi-user.target
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/meshpump -b
+User=root
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
