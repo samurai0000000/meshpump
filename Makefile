@@ -33,3 +33,9 @@ build/$(ARCH)/Makefile: CMakeLists.txt
 release: build/$(ARCH)/Makefile
 	@rm -f build/$(ARCH)/version.h
 	@$(MAKE) -C build/$(ARCH)
+
+.PHONY: install
+
+install: release
+	@sudo install -m 755 build/$(ARCH)/meshpump /usr/local/bin/meshpump
+	@sudo strip /usr/local/bin/meshpump

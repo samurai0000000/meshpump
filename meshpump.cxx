@@ -246,6 +246,7 @@ int main(int argc, char **argv)
 
     atexit(cleanup);
     signal(SIGINT, sighandler);
+    signal(SIGTERM, sighandler);
     signal(SIGPIPE, SIG_IGN);
 
     ledMatrix = make_shared<LedMatrix>();

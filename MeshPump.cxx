@@ -156,7 +156,7 @@ void MeshPump::crontab(const struct tm *now)
     int hour = now->tm_hour;
     bool shouldTurnOn = false;
 
-    if ((hour > 5) || (hour > 18)) {
+    if ((hour <= 5) || (hour > 18)) {
         shouldTurnOn = true;
     }
 

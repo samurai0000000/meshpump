@@ -20,6 +20,7 @@ public:
 
 protected:
 
+    virtual shared_ptr<MeshShell> newInstance(void);
     virtual int system(int argc, char **argv);
     virtual int led(int argc, char **argv);
     virtual int pump(int argc, char **argv);

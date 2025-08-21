@@ -16,11 +16,18 @@ MeshPumpShell::MeshPumpShell(shared_ptr<MeshClient> client)
     : MeshShell(client)
 {
     _help_list.push_back("led");
+    _help_list.push_back("pump");
+    _help_list.push_back("lighting");
 }
 
 MeshPumpShell::~MeshPumpShell()
 {
 
+}
+
+shared_ptr<MeshShell> MeshPumpShell::newInstance(void)
+{
+    return make_shared<MeshPumpShell>();
 }
 
 int MeshPumpShell::system(int argc, char **argv)
