@@ -25,6 +25,8 @@ public:
 
     void join(void);
 
+    float getCpuTempC(void);
+
     bool isFishPumpOn(void) const;
     void setFishPumpOnOff(bool on);
 
@@ -56,8 +58,9 @@ protected:
 
     // Extend HomeChat
 
-    virtual string handleUnknown(uint32_t node_num, string &message);
+    virtual string handleEnv(uint32_t node_num, string &message);
     virtual string handleStatus(uint32_t node_num, string &message);
+    virtual string handleUnknown(uint32_t node_num, string &message);
     virtual string handleLed(uint32_t node_num, string &message);
     virtual string handlePump(uint32_t node_num, string &message);
     virtual int vprintf(const char *format, va_list ap) const;

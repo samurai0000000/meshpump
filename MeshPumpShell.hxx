@@ -20,6 +20,7 @@ public:
 
 protected:
 
+    virtual int system(int argc, char **argv);
     virtual int led(int argc, char **argv);
     virtual int pump(int argc, char **argv);
     virtual int unknown_command(int argc, char **argv);

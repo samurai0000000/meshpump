@@ -23,6 +23,18 @@ MeshPumpShell::~MeshPumpShell()
 
 }
 
+int MeshPumpShell::system(int argc, char **argv)
+{
+    shared_ptr<MeshPump> meshpump = dynamic_pointer_cast<MeshPump>(_client);
+    static const char *pump_argv[] = { "pump", };
+
+    MeshShell::system(argc, argv);
+    pump(1, (char **) pump_argv);
+    this->printf("CPU temp: %.1fC\n", meshpump->getCpuTempC());
+
+    return 0;
+}
+
 static int getArgY(const char *s)
 {
     int ret = 0;
