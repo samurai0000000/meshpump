@@ -7,21 +7,32 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <pigpiod_if.h>
+#include <csignal>
 #include <sstream>
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <ctime>
 #include <MeshPump.hxx>
 #include <LedMatrix.hxx>
 
+extern shared_ptr<MeshPump> meshpump;
 extern shared_ptr<LedMatrix> ledMatrix;
 
 MeshPump::MeshPump()
     : MeshClient()
 {
+    signal(SIGALRM, alarmHandler);
+
+    set_mode(RELAY1_PIN, PI_OUTPUT);
+    set_mode(RELAY2_PIN, PI_OUTPUT);
+    set_mode(RELAY3_PIN, PI_OUTPUT);
+
     setFishPumpOnOff(true);
     setUpPumpOnOff(false);
     setUpPumpAutoCutoffSec(10);
+    setLightingOnOff(false);
 }
 
 MeshPump::~MeshPump()
@@ -39,9 +50,24 @@ bool MeshPump::isFishPumpOn(void) const
     return _fishPump;
 }
 
-void MeshPump::setFishPumpOnOff(bool on)
+void MeshPump::setFishPumpOnOff(bool onOff)
 {
-    _fishPump = on;
+    _fishPump = onOff;
+    gpio_write(RELAY1_PIN, onOff);
+    if (ledMatrix) {
+        if (onOff) {
+            ledMatrix->setText(3, "  ON", 60);
+        } else {
+            ledMatrix->setText(3, " OFF", UINT_MAX);
+        }
+    }
+}
+
+void MeshPump::alarmHandler(int signum)
+{
+    if (signum == SIGALRM) {
+        meshpump->setUpPumpOnOff(false);
+    }
 }
 
 bool MeshPump::isUpPumpOn(void) const
@@ -49,15 +75,34 @@ bool MeshPump::isUpPumpOn(void) const
     return _upPump;
 }
 
-void MeshPump::setUpPumpOnOff(bool on)
+void MeshPump::setUpPumpOnOff(bool onOff)
 {
-    _upPump = on;
+    if (onOff) {
+        setUpPumpOnWithCutoffSec(getUpPumpAutoCutoffSec());
+    } else {
+        gpio_write(RELAY2_PIN, false);
+        if (ledMatrix) {
+            ledMatrix->setText(2, " OFF", 60);
+        }
+    }
 }
 
 void MeshPump::setUpPumpOnWithCutoffSec(unsigned int seconds)
 {
-    (void)(seconds);
+    if (seconds > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
+        goto done;
+    }
+
     _upPump = true;
+    gpio_write(RELAY2_PIN, true);
+    if (ledMatrix) {
+        ledMatrix->setText(2, "  ON", UINT_MAX);
+    }
+    alarm(seconds);
+
+done:
+
+    return;
 }
 
 unsigned int MeshPump::getUpPumpAutoCutoffSec(void) const
@@ -67,7 +112,31 @@ unsigned int MeshPump::getUpPumpAutoCutoffSec(void) const
 
 void MeshPump::setUpPumpAutoCutoffSec(unsigned int seconds)
 {
+    if (seconds > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
+        goto done;
+    }
+
     _upPumpAutoCutoffSec = seconds;
+
+done:
+
+    return;
+}
+
+bool MeshPump::isLightingOn(void) const
+{
+    return _lighting;
+}
+
+void MeshPump::setLightingOnOff(bool onOff)
+{
+    _lighting = onOff;
+    gpio_write(RELAY3_PIN, onOff);
+    if (onOff) {
+        ledMatrix->setText(1, "  ON", 60);
+    } else {
+        ledMatrix->setText(1, " OFF", 60);
+    }
 }
 
 void MeshPump::gotTextMessage(const meshtastic_MeshPacket &packet,
@@ -79,6 +148,20 @@ void MeshPump::gotTextMessage(const meshtastic_MeshPacket &packet,
     result = handleTextMessage(packet, message);
     if (result) {
         return;
+    }
+}
+
+void MeshPump::crontab(const struct tm *now)
+{
+    int hour = now->tm_hour;
+    bool shouldTurnOn = false;
+
+    if ((hour > 5) || (hour > 18)) {
+        shouldTurnOn = true;
+    }
+
+    if (shouldTurnOn != isLightingOn()) {
+        setLightingOnOff(shouldTurnOn);
     }
 }
 
@@ -360,7 +443,7 @@ string MeshPump::handlePump(uint32_t node_num, string &message)
             goto done;
         }
 
-        if (cutoff > 120) {
+        if (cutoff > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
             reply = "cut-off of " + to_string(cutoff) +
                 " seconds is too big!";
             goto done;

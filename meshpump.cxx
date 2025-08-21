@@ -248,6 +248,13 @@ int main(int argc, char **argv)
     signal(SIGINT, sighandler);
     signal(SIGPIPE, SIG_IGN);
 
+    ledMatrix = make_shared<LedMatrix>();
+    ledMatrix->setText(0, copyright);
+    ledMatrix->setText(1, built);
+    ledMatrix->setText(2, version);
+    ledMatrix->setText(3, banner);
+    ledMatrix->start();
+
     meshpump = make_shared<MeshPump>();
     if (meshpump->attachSerial(device) == false) {
         cerr << "Unable to attch to " << device << endl;
@@ -281,13 +288,6 @@ int main(int argc, char **argv)
         stdioShell->setNvm(meshpump);
         stdioShell->attachStdio();
     }
-
-    ledMatrix = make_shared<LedMatrix>();
-    ledMatrix->setText(0, copyright);
-    ledMatrix->setText(1, built);
-    ledMatrix->setText(2, version);
-    ledMatrix->setText(3, banner);
-    ledMatrix->start();
 
     /* ------- */
 

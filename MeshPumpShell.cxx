@@ -27,9 +27,11 @@ int MeshPumpShell::system(int argc, char **argv)
 {
     shared_ptr<MeshPump> meshpump = dynamic_pointer_cast<MeshPump>(_client);
     static const char *pump_argv[] = { "pump", };
+    static const char *lighting_argv[] = { "lighting", };
 
     MeshShell::system(argc, argv);
-    pump(1, (char **) pump_argv);
+    this->pump(1, (char **) pump_argv);
+    this->lighting(1, (char **) lighting_argv);
     this->printf("CPU temp: %.1fC\n", meshpump->getCpuTempC());
 
     return 0;
@@ -184,7 +186,7 @@ int MeshPumpShell::pump(int argc, char **argv)
                 goto done;
             }
 
-            if (cutoff > 120) {
+            if (cutoff > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
                 ret = -1;
                 this->printf("cut-off of %u seconds is too big!\n", cutoff);
                 goto done;
@@ -217,6 +219,28 @@ done:
     return ret;
 }
 
+int MeshPumpShell::lighting(int argc, char **argv)
+{
+    int ret = 0;
+
+    if (argc == 1) {
+        this->printf("lighting: %s\n", meshpump->isLightingOn() ?
+                     "on" : "off");
+    } else if ((argc == 2) && (strcasecmp(argv[1], "on") == 0)) {
+        meshpump->setLightingOnOff(true);
+    } else if ((argc == 2) && (strcasecmp(argv[1], "off") == 0)) {
+        meshpump->setLightingOnOff(false);
+    } else {
+        this->printf("syntax error!\n");
+        ret = -1;
+        goto done;
+    }
+
+done:
+
+    return ret;
+}
+
 int MeshPumpShell::unknown_command(int argc, char **argv)
 {
     int ret = 0;
@@ -225,6 +249,8 @@ int MeshPumpShell::unknown_command(int argc, char **argv)
         ret = this->led(argc, argv);
     } else if (strcmp(argv[0], "pump") == 0) {
         ret = this->pump(argc, argv);
+    } else if (strcmp(argv[0], "lighting") == 0) {
+        ret = this->lighting(argc, argv);
     } else {
         ret = MeshShell::unknown_command(argc, argv);
     }

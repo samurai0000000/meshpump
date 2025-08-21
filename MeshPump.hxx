@@ -11,6 +11,12 @@
 #include <HomeChat.hxx>
 #include <MeshNvm.hxx>
 
+#define RELAY1_PIN  20
+#define RELAY2_PIN  21
+#define RELAY3_PIN  26
+
+#define MAX_UPPUMP_AUTO_CUTOFF_SEC  120
+
 using namespace std;
 
 class MqttClient;
@@ -28,13 +34,16 @@ public:
     float getCpuTempC(void);
 
     bool isFishPumpOn(void) const;
-    void setFishPumpOnOff(bool on);
+    void setFishPumpOnOff(bool onOff);
 
     bool isUpPumpOn(void) const;
-    void setUpPumpOnOff(bool on);
+    void setUpPumpOnOff(bool onOff);
     void setUpPumpOnWithCutoffSec(unsigned int seconds);
     unsigned int getUpPumpAutoCutoffSec(void) const;
     void setUpPumpAutoCutoffSec(unsigned int seconds);
+
+    bool isLightingOn(void) const;
+    void setLightingOnOff(bool onOff);
 
 protected:
 
@@ -46,6 +55,8 @@ protected:
     inline virtual HomeChat *getHomeChat(void) {
         return this;
     }
+
+    virtual void crontab(const struct tm *now);
 
 public:
 
@@ -67,9 +78,12 @@ protected:
 
 private:
 
+    static void alarmHandler(int signum);
+
     bool _fishPump;
     bool _upPump;
     unsigned int _upPumpAutoCutoffSec;
+    bool _lighting;
 
 };
 
