@@ -49,6 +49,10 @@ void sighandler(int signum)
 
 void cleanup(void)
 {
+    meshpump->setFishPumpOnOff(true);
+    meshpump->setUpPumpOnOff(false);
+    meshpump->setLightingOnOff(false);
+
 #if defined(USE_PIGPIO)
     pigpio_stop();
 #endif

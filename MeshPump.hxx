@@ -11,9 +11,9 @@
 #include <HomeChat.hxx>
 #include <MeshNvm.hxx>
 
-#define RELAY1_PIN  20
-#define RELAY2_PIN  21
-#define RELAY3_PIN  26
+#define RELAY1_PIN  26
+#define RELAY2_PIN  20
+#define RELAY3_PIN  21
 
 #define MAX_UPPUMP_AUTO_CUTOFF_SEC  120
 

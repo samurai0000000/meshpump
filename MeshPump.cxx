@@ -37,7 +37,9 @@ MeshPump::MeshPump()
 
 MeshPump::~MeshPump()
 {
-
+    setFishPumpOnOff(true);
+    setUpPumpOnOff(false);
+    setLightingOnOff(false);
 }
 
 void MeshPump::join(void)
@@ -53,7 +55,7 @@ bool MeshPump::isFishPumpOn(void) const
 void MeshPump::setFishPumpOnOff(bool onOff)
 {
     _fishPump = onOff;
-    gpio_write(RELAY1_PIN, onOff);
+    gpio_write(RELAY1_PIN, !onOff);
     if (ledMatrix) {
         if (onOff) {
             ledMatrix->setText(3, "  ON", 60);
@@ -80,7 +82,7 @@ void MeshPump::setUpPumpOnOff(bool onOff)
     if (onOff) {
         setUpPumpOnWithCutoffSec(getUpPumpAutoCutoffSec());
     } else {
-        gpio_write(RELAY2_PIN, false);
+        gpio_write(RELAY2_PIN, !onOff);
         if (ledMatrix) {
             ledMatrix->setText(2, " OFF", 60);
         }
@@ -94,7 +96,7 @@ void MeshPump::setUpPumpOnWithCutoffSec(unsigned int seconds)
     }
 
     _upPump = true;
-    gpio_write(RELAY2_PIN, true);
+    gpio_write(RELAY2_PIN, !_upPump);
     if (ledMatrix) {
         ledMatrix->setText(2, "  ON", UINT_MAX);
     }
@@ -131,7 +133,7 @@ bool MeshPump::isLightingOn(void) const
 void MeshPump::setLightingOnOff(bool onOff)
 {
     _lighting = onOff;
-    gpio_write(RELAY3_PIN, onOff);
+    gpio_write(RELAY3_PIN, !onOff);
     if (onOff) {
         ledMatrix->setText(1, "  ON", 60);
     } else {
