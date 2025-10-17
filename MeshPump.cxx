@@ -160,6 +160,8 @@ void MeshPump::crontab(const struct tm *now)
 
     if ((hour <= 5) || (hour > 18)) {
         shouldTurnOn = true;
+    } else {
+        shouldTurnOn = false;
     }
 
     if (shouldTurnOn != isLightingOn()) {

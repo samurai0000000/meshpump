@@ -261,6 +261,10 @@ int main(int argc, char **argv)
     ledMatrix->start();
 
     meshpump = make_shared<MeshPump>();
+    meshpump->setBanner(banner);
+    meshpump->setVersion(version);
+    meshpump->setBuilt(built);
+    meshpump->setCopyright(copyright);
     if (meshpump->attachSerial(device) == false) {
         cerr << "Unable to attch to " << device << endl;
         exit(EXIT_FAILURE);
@@ -273,10 +277,6 @@ int main(int argc, char **argv)
 
     if (port != 0) {
         netShell = make_shared<MeshPumpShell>();
-        netShell->setBanner(banner);
-        netShell->setVersion(version);
-        netShell->setBuilt(built);
-        netShell->setCopyright(copyright);
         netShell->setClient(meshpump);
         netShell->setNvm(meshpump);
         netShell->bindPort(port);
@@ -285,10 +285,6 @@ int main(int argc, char **argv)
 
     if (useStdioShell) {
         stdioShell = make_shared<MeshPumpShell>();
-        stdioShell->setBanner(banner);
-        stdioShell->setVersion(version);
-        stdioShell->setBuilt(built);
-        stdioShell->setCopyright(copyright);
         stdioShell->setClient(meshpump);
         stdioShell->setNvm(meshpump);
         stdioShell->attachStdio();
