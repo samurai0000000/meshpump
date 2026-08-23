@@ -7,7 +7,7 @@ MAKEFLAGS =	--no-print-dir
 
 TARGETS +=	build/$(ARCH)/meshpump
 
-.PHONY: default clean distclean $(TARGETS)
+.PHONY: default clean distclean
 
 default: $(TARGETS)
 
@@ -21,7 +21,19 @@ distclean:
 
 meshpump: build/$(ARCH)/meshpump
 
-build/$(ARCH)/meshpump: build/$(ARCH)/Makefile
+MESHPUMP_TREE :=	\
+	CMakeLists.txt version.h.in \
+	$(wildcard *.cxx) $(wildcard *.hxx) \
+	libmeshtastic
+MESHPUMP_SRCS :=	$(shell find -H $(MESHPUMP_TREE) -type f \
+	    \( -name '*.c' -o -name '*.cxx' -o -name '*.h' -o -name '*.hxx' \
+	       -o -name 'CMakeLists.txt' -o -name 'version.h.in' \) \
+	    2>/dev/null)
+
+build/$(ARCH)/meshpump: build/$(ARCH)/Makefile $(MESHPUMP_SRCS)
+	@if [ -f $@ ]; then \
+		rm -f build/$(ARCH)/version.h; \
+	fi
 	@$(MAKE) -C build/$(ARCH)
 
 build/$(ARCH)/Makefile: CMakeLists.txt

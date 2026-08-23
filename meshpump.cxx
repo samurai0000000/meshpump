@@ -8,13 +8,20 @@
 #include <getopt.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <libconfig.h++>
 #if defined(USE_PIGPIO)
 #include <pigpiod_if.h>
 #endif
 #include <iostream>
+#include <memory>
+#include <string>
 #include <vector>
 #include <algorithm>
+#include <thread>
 #include "MeshPump.hxx"
 #include "LedMatrix.hxx"
 #include <MeshPumpShell.hxx>
@@ -28,11 +35,22 @@ shared_ptr<MeshPump> meshpump = NULL;
 shared_ptr<LedMatrix> ledMatrix = NULL;
 static shared_ptr<MeshPumpShell> stdioShell = NULL;
 static shared_ptr<MeshPumpShell> netShell = NULL;
+static volatile sig_atomic_t g_stop = 0;
+static int g_stop_pipe[2] = { -1, -1 };
 
 void sighandler(int signum)
 {
-    (void)(signum);
+    char c = 1;
 
+    (void)(signum);
+    g_stop = 1;
+    if (g_stop_pipe[1] != -1) {
+        (void) write(g_stop_pipe[1], &c, 1);
+    }
+}
+
+static void requestStop(void)
+{
     if (meshpump) {
         meshpump->detach();
     }
@@ -47,11 +65,61 @@ void sighandler(int signum)
     }
 }
 
+static void stopWatcher(void)
+{
+    char c;
+
+    while (!g_stop) {
+        ssize_t n = read(g_stop_pipe[0], &c, 1);
+        if (n > 0) {
+            break;
+        }
+        if ((n < 0) && (errno == EINTR)) {
+            continue;
+        }
+        break;
+    }
+    requestStop();
+}
+
+static bool parsePort(const char *s, uint16_t &port)
+{
+    char *end = NULL;
+    unsigned long v;
+
+    if ((s == NULL) || (s[0] == '\0')) {
+        return false;
+    }
+
+    errno = 0;
+    v = strtoul(s, &end, 10);
+    if ((errno != 0) || (end == s) || (*end != '\0') || (v > 65535)) {
+        return false;
+    }
+
+    port = (uint16_t) v;
+    return true;
+}
+
+static void releaseMeshPump(void)
+{
+    stdioShell.reset();
+    netShell.reset();
+    if (meshpump) {
+        meshpump->setClient(NULL);
+        meshpump->setNvm(NULL);
+    }
+    meshpump.reset();
+    ledMatrix.reset();
+}
+
 void cleanup(void)
 {
-    meshpump->setFishPumpOnOff(true);
-    meshpump->setUpPumpOnOff(false);
-    meshpump->setLightingOnOff(false);
+    if (meshpump) {
+        meshpump->setFishPumpOnOff(true);
+        meshpump->setUpPumpOnOff(false);
+        meshpump->setLightingOnOff(false);
+    }
 
 #if defined(USE_PIGPIO)
     pigpio_stop();
@@ -63,36 +131,49 @@ static void loadLibConfig(Config &cfg, string &path)
     int fd;
 
     if (path.empty()) {
-        string home;
+        const char *homedir;
 
-        home = getenv("HOME");
-        if (home.empty()) {
+        homedir = getenv("HOME");
+        if ((homedir == NULL) || (homedir[0] == '\0')) {
             return;
         }
 
-        path = home + "/.meshpump";
+        path = string(homedir) + "/.meshpump";
     }
 
     // 'touch' to test the path validity
     fd = open(path.c_str(),
               O_WRONLY | O_CREAT | O_NOCTTY | O_NONBLOCK,
-              0666);
+              S_IRUSR | S_IWUSR);
     if (fd == -1) {
-        goto done;
-    } else {
+        cerr << path << ": " << strerror(errno) << endl;
+        return;
+    }
+    if (fchmod(fd, S_IRUSR | S_IWUSR) == -1) {
+        cerr << path << ": " << strerror(errno) << endl;
         close(fd);
-        fd = -1;
+        return;
+    }
+    close(fd);
+
+    {
+        struct stat st;
+
+        if ((stat(path.c_str(), &st) == 0) && (st.st_size == 0)) {
+            return;
+        }
     }
 
     try {
         cfg.readFile(path.c_str());
-    } catch (FileIOException &e) {
+    } catch (const FileIOException &) {
+        cerr << "Unable to read config " << path << endl;
+        exit(EXIT_FAILURE);
     } catch (ParseException &e) {
+        cerr << "Parse error in " << e.getFile()
+             << " line " << e.getLine() << ": " << e.getError() << endl;
+        exit(EXIT_FAILURE);
     }
-
-done:
-
-    return;
 }
 
 static const struct option long_options[] = {
@@ -102,6 +183,7 @@ static const struct option long_options[] = {
     { "daemon", no_argument, NULL, 'b', },
     { "verbose", no_argument, NULL, 'v', },
     { "log", no_argument, NULL, 'l', },
+    { 0, 0, 0, 0 },
 };
 
 int main(int argc, char **argv)
@@ -156,8 +238,13 @@ int main(int argc, char **argv)
     try {
         int cfgPort = 0;
         Setting &root = cfg.getRoot();
-        root.lookupValue("port", cfgPort);
-        port = cfgPort;
+        if (root.lookupValue("port", cfgPort)) {
+            if ((cfgPort < 0) || (cfgPort > 65535)) {
+                cerr << "Invalid config port: " << cfgPort << endl;
+                exit(EXIT_FAILURE);
+            }
+            port = (uint16_t) cfgPort;
+        }
     } catch (SettingNotFoundException &e) {
     } catch (SettingTypeException &e) {
     }
@@ -187,7 +274,10 @@ int main(int argc, char **argv)
             useStdioShell = true;
             break;
         case 'p':
-            port = atoi(optarg);
+            if (!parsePort(optarg, port)) {
+                cerr << "Invalid port: " << optarg << endl;
+                exit(EXIT_FAILURE);
+            }
             break;
         case 'b':
             daemon = true;
@@ -232,26 +322,45 @@ int main(int argc, char **argv)
         if (pid == -1) {
             cerr << "fork failed!" << endl;
             exit(EXIT_FAILURE);
-        } else if (pid  != 0) {
+        } else if (pid != 0) {
             exit(EXIT_SUCCESS);
-        } else {
-            close(STDIN_FILENO);
-            close(STDOUT_FILENO);
-            close(STDERR_FILENO);
+        }
 
-            fdevnull = open("/dev/null", O_WRONLY);
-            if (fdevnull != -1) {
-                dup2(fdevnull, STDOUT_FILENO);
-                dup2(fdevnull, STDERR_FILENO);
+        if (setsid() == -1) {
+            exit(EXIT_FAILURE);
+        }
+
+        fdevnull = open("/dev/null", O_RDWR);
+        if (fdevnull != -1) {
+            dup2(fdevnull, STDIN_FILENO);
+            dup2(fdevnull, STDOUT_FILENO);
+            dup2(fdevnull, STDERR_FILENO);
+            if (fdevnull > STDERR_FILENO) {
                 close(fdevnull);
             }
         }
     }
 
     atexit(cleanup);
+
+    if (pipe(g_stop_pipe) == -1) {
+        cerr << "pipe failed: " << strerror(errno) << endl;
+        exit(EXIT_FAILURE);
+    }
+    fcntl(g_stop_pipe[0], F_SETFD, FD_CLOEXEC);
+    fcntl(g_stop_pipe[1], F_SETFD, FD_CLOEXEC);
+    {
+        int flags = fcntl(g_stop_pipe[1], F_GETFL, 0);
+        if (flags != -1) {
+            fcntl(g_stop_pipe[1], F_SETFL, flags | O_NONBLOCK);
+        }
+    }
+
     signal(SIGINT, sighandler);
     signal(SIGTERM, sighandler);
     signal(SIGPIPE, SIG_IGN);
+
+    thread stopThread(stopWatcher);
 
     ledMatrix = make_shared<LedMatrix>();
     ledMatrix->setText(0, copyright);
@@ -265,32 +374,40 @@ int main(int argc, char **argv)
     meshpump->setVersion(version);
     meshpump->setBuilt(built);
     meshpump->setCopyright(copyright);
+
     if (meshpump->attachSerial(device) == false) {
-        cerr << "Unable to attch to " << device << endl;
-        exit(EXIT_FAILURE);
+        cerr << "Unable to attach to " << device << endl;
+        ret = EXIT_FAILURE;
+        requestStop();
+    } else if (g_stop) {
+        meshpump->detach();
+        ret = EXIT_FAILURE;
+    } else {
+        meshpump->setClient(meshpump);
+        meshpump->setNvm(meshpump);
+        meshpump->setVerbose(verbose);
+        meshpump->enableLogStderr(log);
+
+        if (port != 0) {
+            netShell = make_shared<MeshPumpShell>();
+            netShell->setClient(meshpump);
+            netShell->setNvm(meshpump);
+            if (!netShell->bindPort(port)) {
+                netShell.reset();
+            }
+        }
+
+        if (useStdioShell && !g_stop) {
+            stdioShell = make_shared<MeshPumpShell>();
+            stdioShell->setClient(meshpump);
+            stdioShell->setNvm(meshpump);
+            stdioShell->attachStdio();
+        }
     }
 
-    meshpump->setClient(meshpump);
-    meshpump->setNvm(meshpump);
-    meshpump->setVerbose(verbose);
-    meshpump->enableLogStderr(log);
-
-    if (port != 0) {
-        netShell = make_shared<MeshPumpShell>();
-        netShell->setClient(meshpump);
-        netShell->setNvm(meshpump);
-        netShell->bindPort(port);
+    if (g_stop) {
+        requestStop();
     }
-
-
-    if (useStdioShell) {
-        stdioShell = make_shared<MeshPumpShell>();
-        stdioShell->setClient(meshpump);
-        stdioShell->setNvm(meshpump);
-        stdioShell->attachStdio();
-    }
-
-    /* ------- */
 
     if (meshpump) {
         meshpump->join();
@@ -305,7 +422,28 @@ int main(int argc, char **argv)
         ledMatrix->join();
     }
 
-    cout << "Good-bye!" << endl;
+    if (ret == 0) {
+        cout << "Good-bye!" << endl;
+    }
+
+    g_stop = 1;
+    if (g_stop_pipe[1] != -1) {
+        char c = 1;
+        (void) write(g_stop_pipe[1], &c, 1);
+    }
+    if (stopThread.joinable()) {
+        stopThread.join();
+    }
+    if (g_stop_pipe[0] != -1) {
+        close(g_stop_pipe[0]);
+        g_stop_pipe[0] = -1;
+    }
+    if (g_stop_pipe[1] != -1) {
+        close(g_stop_pipe[1]);
+        g_stop_pipe[1] = -1;
+    }
+
+    releaseMeshPump();
 
     return ret;
 }

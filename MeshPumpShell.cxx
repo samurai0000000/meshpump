@@ -37,6 +37,10 @@ int MeshPumpShell::system(int argc, char **argv)
     static const char *lighting_argv[] = { "lighting", };
 
     MeshShell::system(argc, argv);
+    if (meshpump == NULL) {
+        return 0;
+    }
+
     this->pump(1, (char **) pump_argv);
     this->lighting(1, (char **) lighting_argv);
     this->printf("CPU temp: %.1fC\n", meshpump->getCpuTempC());

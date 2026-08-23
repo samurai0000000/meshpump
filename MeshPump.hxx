@@ -31,6 +31,9 @@ public:
 
     void join(void);
 
+    virtual void setClient(shared_ptr<SimpleClient> client);
+    virtual void setNvm(shared_ptr<BaseNvm> nvm);
+
     float getCpuTempC(void);
 
     bool isFishPumpOn(void) const;
@@ -49,6 +52,9 @@ protected:
 
     // Extend MeshClient
 
+    virtual void gotConfigCompleteId(uint32_t id);
+    virtual void gotRebooted(bool rebooted);
+    virtual void loop(void);
     virtual void gotTextMessage(const meshtastic_MeshPacket &packet,
                                 const string &message);
 
@@ -80,6 +86,7 @@ private:
 
     static void alarmHandler(int signum);
 
+    bool _announcedUp;
     bool _fishPump;
     bool _upPump;
     unsigned int _upPumpAutoCutoffSec;

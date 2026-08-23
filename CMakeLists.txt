@@ -6,6 +6,12 @@ cmake_minimum_required(VERSION 3.13)
 
 project(meshpump VERSION 1.3.15 LANGUAGES C CXX ASM)
 
+find_path(CONFIG++_INCLUDE_DIR NAMES libconfig.h++)
+find_library(CONFIG++_LIBRARY NAMES config++ libconfig++)
+if (NOT CONFIG++_INCLUDE_DIR OR NOT CONFIG++_LIBRARY)
+  message(FATAL_ERROR "libconfig++ not found")
+endif ()
+
 add_subdirectory(libmeshtastic)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -56,7 +62,7 @@ add_executable(meshpump
   MeshPumpShell.cxx
   )
 target_include_directories(meshpump PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(meshpump PRIVATE ${MOSQUITTO_INCLUDE_DIR})
+target_include_directories(meshpump PRIVATE ${CONFIG++_INCLUDE_DIR})
 target_link_libraries(meshpump PRIVATE
   libmeshtastic
   ${CONFIG++_LIBRARY})

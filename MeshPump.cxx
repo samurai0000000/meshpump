@@ -9,6 +9,8 @@
 #include <sys/ioctl.h>
 #include <pigpiod_if.h>
 #include <csignal>
+#include <cstring>
+#include <cctype>
 #include <sstream>
 #include <iostream>
 #include <iomanip>
@@ -23,6 +25,7 @@ extern shared_ptr<LedMatrix> ledMatrix;
 MeshPump::MeshPump()
     : MeshClient()
 {
+    _announcedUp = false;
     signal(SIGALRM, alarmHandler);
 
     set_mode(RELAY1_PIN, PI_OUTPUT);
@@ -45,6 +48,76 @@ MeshPump::~MeshPump()
 void MeshPump::join(void)
 {
     MeshClient::join();
+}
+
+void MeshPump::setClient(shared_ptr<SimpleClient> client)
+{
+    if (client && (client.get() == static_cast<SimpleClient *>(this))) {
+        // Non-owning: HomeChat must not keep a shared_ptr to *this
+        HomeChat::setClient(shared_ptr<SimpleClient>(
+                                shared_ptr<SimpleClient>(), this));
+        return;
+    }
+
+    HomeChat::setClient(client);
+}
+
+void MeshPump::setNvm(shared_ptr<BaseNvm> nvm)
+{
+    if (nvm && (nvm.get() == static_cast<BaseNvm *>(this))) {
+        // Non-owning: HomeChat must not keep a shared_ptr to *this
+        HomeChat::setNvm(shared_ptr<BaseNvm>(shared_ptr<BaseNvm>(), this));
+        return;
+    }
+
+    HomeChat::setNvm(nvm);
+}
+
+void MeshPump::gotConfigCompleteId(uint32_t id)
+{
+    MeshClient::gotConfigCompleteId(id);
+
+    if (setupFor(whoami()) == true) {
+        if (loadNvm() == false) {
+            saveNvm();
+        }
+        syncFromNvm();
+    }
+}
+
+void MeshPump::gotRebooted(bool rebooted)
+{
+    MeshClient::gotRebooted(rebooted);
+    _announcedUp = false;
+}
+
+void MeshPump::loop(void)
+{
+    if (isConnected() && !_announcedUp) {
+        if (nvmAuthchans().empty()) {
+            _announcedUp = true;
+        } else {
+            const struct nvm_authchan_entry &ac = nvmAuthchans()[0];
+            string chanName(ac.name, strnlen(ac.name, sizeof(ac.name)));
+            uint8_t channel = getChannel(chanName);
+            string announcement;
+
+            if (channel == 0xffU) {
+                _announcedUp = true;
+            } else {
+                announcement = SimpleClient::lookupLongName(whoami(), true);
+                if (announcement.empty()) {
+                    announcement = whoamiString();
+                }
+                announcement += " is up";
+                if (textMessage(0xffffffffU, channel, announcement)) {
+                    _announcedUp = true;
+                } else {
+                    cerr << "boot announce failed!" << endl;
+                }
+            }
+        }
+    }
 }
 
 bool MeshPump::isFishPumpOn(void) const
@@ -225,12 +298,18 @@ float MeshPump::getCpuTempC(void)
     }
 
     s = (const char *) (p + 6);
-    for (unsigned int i = 0; i < (sizeof(p) - 6); i++) {
-        if (s[i] == '\'') {
-            break;
-        }
-        if (isdigit(s[i]) || (s[i] == '.')) {
-            str += s[i];
+    {
+        size_t slen = sizeof(p) - ((const char *) s - (const char *) p);
+
+        for (size_t j = 0; j < slen; j++) {
+            unsigned char c = (unsigned char) s[j];
+
+            if (s[j] == '\'') {
+                break;
+            }
+            if (isdigit(c) || (s[j] == '.')) {
+                str += s[j];
+            }
         }
     }
 
