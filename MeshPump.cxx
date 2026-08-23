@@ -7,10 +7,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <pigpiod_if.h>
+#include <lgpio.h>
 #include <csignal>
 #include <cstring>
 #include <cctype>
+#include <cstdlib>
 #include <sstream>
 #include <iostream>
 #include <iomanip>
@@ -25,12 +26,36 @@ extern shared_ptr<LedMatrix> ledMatrix;
 MeshPump::MeshPump()
     : MeshClient()
 {
+    int status;
+
+    _gpiochip = -1;
     _announcedUp = false;
     signal(SIGALRM, alarmHandler);
 
-    set_mode(RELAY1_PIN, PI_OUTPUT);
-    set_mode(RELAY2_PIN, PI_OUTPUT);
-    set_mode(RELAY3_PIN, PI_OUTPUT);
+    _gpiochip = openGpiochip();
+    if (_gpiochip < 0) {
+        cerr << "lgGpiochipOpen failed: " << lguErrorText(_gpiochip) << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    status = lgGpioClaimOutput(_gpiochip, 0, RELAY1_PIN, 0);
+    if (status < 0) {
+        cerr << "lgGpioClaimOutput " << RELAY1_PIN << " failed: "
+             << lguErrorText(status) << endl;
+        exit(EXIT_FAILURE);
+    }
+    status = lgGpioClaimOutput(_gpiochip, 0, RELAY2_PIN, 1);
+    if (status < 0) {
+        cerr << "lgGpioClaimOutput " << RELAY2_PIN << " failed: "
+             << lguErrorText(status) << endl;
+        exit(EXIT_FAILURE);
+    }
+    status = lgGpioClaimOutput(_gpiochip, 0, RELAY3_PIN, 1);
+    if (status < 0) {
+        cerr << "lgGpioClaimOutput " << RELAY3_PIN << " failed: "
+             << lguErrorText(status) << endl;
+        exit(EXIT_FAILURE);
+    }
 
     setFishPumpOnOff(true);
     setUpPumpOnOff(false);
@@ -43,6 +68,44 @@ MeshPump::~MeshPump()
     setFishPumpOnOff(true);
     setUpPumpOnOff(false);
     setLightingOnOff(false);
+
+    if (_gpiochip >= 0) {
+        lgGpioFree(_gpiochip, RELAY1_PIN);
+        lgGpioFree(_gpiochip, RELAY2_PIN);
+        lgGpioFree(_gpiochip, RELAY3_PIN);
+        lgGpiochipClose(_gpiochip);
+        _gpiochip = -1;
+    }
+}
+
+int MeshPump::openGpiochip(void)
+{
+    lgChipInfo_t info;
+    int h, i, status;
+
+    for (i = 0; i < 8; i++) {
+        h = lgGpiochipOpen(i);
+        if (h < 0) {
+            continue;
+        }
+
+        status = lgGpioGetChipInfo(h, &info);
+        if ((status == LG_OKAY) &&
+            (strstr(info.label, "pinctrl") != NULL)) {
+            return h;
+        }
+
+        lgGpiochipClose(h);
+    }
+
+    return lgGpiochipOpen(0);
+}
+
+void MeshPump::gpioWrite(int pin, int level)
+{
+    if (_gpiochip >= 0) {
+        lgGpioWrite(_gpiochip, pin, level);
+    }
 }
 
 void MeshPump::join(void)
@@ -128,7 +191,7 @@ bool MeshPump::isFishPumpOn(void) const
 void MeshPump::setFishPumpOnOff(bool onOff)
 {
     _fishPump = onOff;
-    gpio_write(RELAY1_PIN, !onOff);
+    gpioWrite(RELAY1_PIN, !onOff);
     if (ledMatrix) {
         if (onOff) {
             ledMatrix->setText(3, "  ON", 60);
@@ -155,7 +218,7 @@ void MeshPump::setUpPumpOnOff(bool onOff)
     if (onOff) {
         setUpPumpOnWithCutoffSec(getUpPumpAutoCutoffSec());
     } else {
-        gpio_write(RELAY2_PIN, !onOff);
+        gpioWrite(RELAY2_PIN, !onOff);
         if (ledMatrix) {
             ledMatrix->setText(2, " OFF", 60);
         }
@@ -169,7 +232,7 @@ void MeshPump::setUpPumpOnWithCutoffSec(unsigned int seconds)
     }
 
     _upPump = true;
-    gpio_write(RELAY2_PIN, !_upPump);
+    gpioWrite(RELAY2_PIN, !_upPump);
     if (ledMatrix) {
         ledMatrix->setText(2, "  ON", UINT_MAX);
     }
@@ -206,7 +269,7 @@ bool MeshPump::isLightingOn(void) const
 void MeshPump::setLightingOnOff(bool onOff)
 {
     _lighting = onOff;
-    gpio_write(RELAY3_PIN, !onOff);
+    gpioWrite(RELAY3_PIN, !onOff);
     if (onOff) {
         ledMatrix->setText(1, "  ON", 60);
     } else {

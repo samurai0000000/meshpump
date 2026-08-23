@@ -86,6 +86,10 @@ private:
 
     static void alarmHandler(int signum);
 
+    int openGpiochip(void);
+    void gpioWrite(int pin, int level);
+
+    int _gpiochip;
     bool _announcedUp;
     bool _fishPump;
     bool _upPump;

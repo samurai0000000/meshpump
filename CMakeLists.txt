@@ -19,7 +19,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fexceptions -frtti")
 
-set(USE_PIGPIO ON)
+find_path(LGPIO_INCLUDE_DIR NAMES lgpio.h)
+find_library(LGPIO_LIBRARY NAMES lgpio)
+if (NOT LGPIO_INCLUDE_DIR OR NOT LGPIO_LIBRARY)
+  message(FATAL_ERROR "liblgpio not found")
+endif ()
 
 include_directories(${CMAKE_CURRENT_LIST_DIR})
 add_compile_options(-Wall -Wextra -Werror)
@@ -62,11 +66,10 @@ add_executable(meshpump
   MeshPumpShell.cxx
   )
 target_include_directories(meshpump PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
-target_include_directories(meshpump PRIVATE ${CONFIG++_INCLUDE_DIR})
+target_include_directories(meshpump PRIVATE
+  ${CONFIG++_INCLUDE_DIR}
+  ${LGPIO_INCLUDE_DIR})
 target_link_libraries(meshpump PRIVATE
   libmeshtastic
-  ${CONFIG++_LIBRARY})
-if (USE_PIGPIO)
-  target_compile_definitions(meshpump PRIVATE USE_PIGPIO=${USE_PIGPIO})
-  target_link_libraries(meshpump PRIVATE pigpiod_if)
-endif ()
+  ${CONFIG++_LIBRARY}
+  ${LGPIO_LIBRARY})

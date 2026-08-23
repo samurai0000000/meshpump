@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
-#include <pigpiod_if.h>
+#include <lgpio.h>
 #include <climits>
 #include <cstring>
 #include <iostream>
@@ -16,26 +16,18 @@
 #include <max7219_defs.h>
 #include <LedMatrix.hxx>
 
+#define MAX7219_SPI_DEV    0
 #define MAX7219_SPI_CHAN   0
 #define MAX7219_SPI_SPEED  1000000
-#define MAX7219_SPI_MODE                    \
-    PI_SPI_FLAGS_BITLEN(0)   |              \
-    PI_SPI_FLAGS_RX_LSB(0)   |              \
-    PI_SPI_FLAGS_TX_LSB(0)   |              \
-    PI_SPI_FLAGS_3WREN(0)    |              \
-    PI_SPI_FLAGS_3WIRE(0)    |              \
-    PI_SPI_FLAGS_AUX_SPI(0)  |              \
-    PI_SPI_FLAGS_RESVD(0)    |              \
-    PI_SPI_FLAGS_CSPOLS(0)   |              \
-    PI_SPI_FLAGS_MODE(0)
 
 LedMatrix::LedMatrix()
   : _intensity(1),
     _fb()
 {
-    _handle = spi_open(MAX7219_SPI_CHAN, MAX7219_SPI_SPEED, MAX7219_SPI_MODE);
+    _handle = lgSpiOpen(MAX7219_SPI_DEV, MAX7219_SPI_CHAN,
+                        MAX7219_SPI_SPEED, 0);
     if (_handle < 0) {
-        cerr << "spiOpen failed!" << endl;
+        cerr << "lgSpiOpen failed: " << lguErrorText(_handle) << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -65,7 +57,7 @@ LedMatrix::~LedMatrix()
     stop();
 
     if (_handle >= 0) {
-        spi_close(_handle);
+        lgSpiClose(_handle);
         _handle = -1;
     }
 }
@@ -197,9 +189,9 @@ int LedMatrix::writeMax7219(const void *data, size_t size)
 {
     int ret;
 
-    ret = spi_write(_handle, (char *) data, size);
+    ret = lgSpiWrite(_handle, (const char *) data, (int) size);
     if (ret != (int) size) {
-        cerr << "spi_write failed!" << endl;
+        cerr << "lgSpiWrite failed!" << endl;
     }
 
     return ret;
@@ -216,9 +208,9 @@ int LedMatrix::writeMax7219(uint8_t reg, uint8_t data)
         xmit[i * 2 + 1] = data;
     }
 
-    ret = spi_write(_handle, xmit, sizeof(xmit));
-    if (ret != sizeof(xmit)) {
-        cerr << "spi_write failed!" << endl;
+    ret = lgSpiWrite(_handle, xmit, (int) sizeof(xmit));
+    if (ret != (int) sizeof(xmit)) {
+        cerr << "lgSpiWrite failed!" << endl;
     }
 
     return ret;

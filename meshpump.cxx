@@ -13,9 +13,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <libconfig.h++>
-#if defined(USE_PIGPIO)
-#include <pigpiod_if.h>
-#endif
 #include <iostream>
 #include <memory>
 #include <string>
@@ -120,10 +117,6 @@ void cleanup(void)
         meshpump->setUpPumpOnOff(false);
         meshpump->setLightingOnOff(false);
     }
-
-#if defined(USE_PIGPIO)
-    pigpio_stop();
-#endif
 }
 
 static void loadLibConfig(Config &cfg, string &path)
@@ -298,15 +291,6 @@ int main(int argc, char **argv)
     if (device.empty()) {
         device = DEFAULT_DEVICE;
     }
-
-#if defined(USE_PIGPIO)
-    ret = pigpio_start(NULL, NULL);
-    if (ret != 0) {
-        cerr << "pgpiod_start failed!" << endl;
-        ret = -1;
-        exit(EXIT_FAILURE);
-    }
-#endif
 
     if (daemon) {
         pid_t pid;
