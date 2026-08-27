@@ -32,6 +32,11 @@ shared_ptr<MeshShell> MeshPumpShell::newInstance(void)
 
 int MeshPumpShell::system(int argc, char **argv)
 {
+    if ((argc >= 2) &&
+        ((strcmp(argv[1], "-h") == 0) || (strcmp(argv[1], "--help") == 0))) {
+        return MeshShell::system(argc, argv);
+    }
+
     shared_ptr<MeshPump> meshpump = dynamic_pointer_cast<MeshPump>(_client);
     static const char *pump_argv[] = { "pump", };
     static const char *lighting_argv[] = { "lighting", };
@@ -70,6 +75,20 @@ int MeshPumpShell::led(int argc, char **argv)
     string message;
     int startArg = 1;
     int y = 0;
+
+    if ((argc >= 2) &&
+        ((strcmp(argv[1], "-h") == 0) || (strcmp(argv[1], "--help") == 0))) {
+        this->printf("Usage: %s [-h|--help] [command|row] [args...]\n", argv[0]);
+        this->printf("  Configure or display text on the LED matrix.\n");
+        this->printf("Commands:\n");
+        this->printf("  led                          Show delay, row TTL, and slowdown factors\n");
+        this->printf("  led delay <ms>               Set scroll step delay in milliseconds\n");
+        this->printf("  led sf <row> <sf>            Set slowdown factor for specified row\n");
+        this->printf("  led blank                    Clear LED display\n");
+        this->printf("  led welcome                  Display welcome text\n");
+        this->printf("  led <row> <text>             Display text on specified row\n");
+        return 0;
+    }
 
     if (argc == 1) {
         this->printf("delay: %ums\n", ledMatrix->delay());
@@ -154,6 +173,17 @@ int MeshPumpShell::pump(int argc, char **argv)
     bool onOff = false;
     unsigned int cutoff = 0;
 
+    if ((argc >= 2) &&
+        ((strcmp(argv[1], "-h") == 0) || (strcmp(argv[1], "--help") == 0))) {
+        this->printf("Usage: %s [-h|--help] [fish|up] [on|off] [cutoff_sec]\n", argv[0]);
+        this->printf("  Control water pumps or show pump status.\n");
+        this->printf("Commands:\n");
+        this->printf("  pump                         Show pump status and auto-cutoff settings\n");
+        this->printf("  pump fish on|off             Turn fish pump on or off\n");
+        this->printf("  pump up on|off [cutoff_sec]  Turn up pump on or off (with optional cutoff duration in sec)\n");
+        return 0;
+    }
+
     if (argc == 1) {
         this->printf("fish-pump: %s\n",
                      meshpump->isFishPumpOn() ? "on" : "off");
@@ -233,6 +263,16 @@ done:
 int MeshPumpShell::lighting(int argc, char **argv)
 {
     int ret = 0;
+
+    if ((argc >= 2) &&
+        ((strcmp(argv[1], "-h") == 0) || (strcmp(argv[1], "--help") == 0))) {
+        this->printf("Usage: %s [-h|--help] [on|off]\n", argv[0]);
+        this->printf("  Control lighting or show lighting status.\n");
+        this->printf("Commands:\n");
+        this->printf("  lighting                     Show lighting status\n");
+        this->printf("  lighting on|off              Turn lighting on or off\n");
+        return 0;
+    }
 
     if (argc == 1) {
         this->printf("lighting: %s\n", meshpump->isLightingOn() ?
