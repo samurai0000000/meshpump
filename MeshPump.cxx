@@ -29,7 +29,6 @@ MeshPump::MeshPump()
     int status;
 
     _gpiochip = -1;
-    _announcedUp = false;
     signal(SIGALRM, alarmHandler);
 
     _gpiochip = openGpiochip();
@@ -128,59 +127,37 @@ void MeshPump::setClient(shared_ptr<SimpleClient> client)
 void MeshPump::setNvm(shared_ptr<BaseNvm> nvm)
 {
     if (nvm && (nvm.get() == static_cast<BaseNvm *>(this))) {
-        // Non-owning: HomeChat must not keep a shared_ptr to *this
-        HomeChat::setNvm(shared_ptr<BaseNvm>(shared_ptr<BaseNvm>(), this));
+        // Non-owning: HomeChat and SimpleClient must not keep a shared_ptr to *this
+        shared_ptr<BaseNvm> nonOwning(shared_ptr<BaseNvm>(), this);
+        HomeChat::setNvm(nonOwning);
+        SimpleClient::setNvm(nonOwning);
         return;
     }
 
     HomeChat::setNvm(nvm);
+    SimpleClient::setNvm(nvm);
 }
 
 void MeshPump::gotConfigCompleteId(uint32_t id)
 {
-    MeshClient::gotConfigCompleteId(id);
-
     if (setupFor(whoami()) == true) {
         if (loadNvm() == false) {
             saveNvm();
         }
         syncFromNvm();
     }
+
+    MeshClient::gotConfigCompleteId(id);
 }
 
 void MeshPump::gotRebooted(bool rebooted)
 {
     MeshClient::gotRebooted(rebooted);
-    _announcedUp = false;
 }
 
 void MeshPump::loop(void)
 {
-    if (isConnected() && !_announcedUp) {
-        if (nvmAuthchans().empty()) {
-            _announcedUp = true;
-        } else {
-            const struct nvm_authchan_entry &ac = nvmAuthchans()[0];
-            string chanName(ac.name, strnlen(ac.name, sizeof(ac.name)));
-            uint8_t channel = getChannel(chanName);
-            string announcement;
 
-            if (channel == 0xffU) {
-                _announcedUp = true;
-            } else {
-                announcement = SimpleClient::lookupLongName(whoami(), true);
-                if (announcement.empty()) {
-                    announcement = whoamiString();
-                }
-                announcement += " is up";
-                if (textMessage(0xffffffffU, channel, announcement)) {
-                    _announcedUp = true;
-                } else {
-                    cerr << "boot announce failed!" << endl;
-                }
-            }
-        }
-    }
 }
 
 bool MeshPump::isFishPumpOn(void) const

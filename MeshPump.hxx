@@ -90,7 +90,6 @@ private:
     void gpioWrite(int pin, int level);
 
     int _gpiochip;
-    bool _announcedUp;
     bool _fishPump;
     bool _upPump;
     unsigned int _upPumpAutoCutoffSec;
