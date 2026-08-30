@@ -4,7 +4,7 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-project(meshpump VERSION 2.0.0 LANGUAGES C CXX ASM)
+project(meshpump VERSION 2.0.1 LANGUAGES C CXX ASM)
 
 find_path(CONFIG++_INCLUDE_DIR NAMES libconfig.h++)
 find_library(CONFIG++_LIBRARY NAMES config++ libconfig++)
