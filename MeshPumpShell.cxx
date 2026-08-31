@@ -5,6 +5,7 @@
  */
 
 #include <string>
+#include <stdexcept>
 #include <MeshPump.hxx>
 #include <LedMatrix.hxx>
 #include <MeshPumpShell.hxx>

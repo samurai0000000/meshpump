@@ -7,8 +7,8 @@
 #ifndef MESHPUMP_HXX
 #define MESHPUMP_HXX
 
-#include <LibMeshtastic.hxx>
 #include <HomeChat.hxx>
+#include <MeshClient.hxx>
 #include <MeshNvm.hxx>
 
 #define RELAY1_PIN  26
