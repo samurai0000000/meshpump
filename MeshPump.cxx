@@ -390,9 +390,9 @@ string MeshPump::handleStatus(uint32_t node_num, string &message)
     (void)(node_num);
     (void)(message);
 
-    ss << "fish-pump: " << (isFishPumpOn() ? "on" : "off") << endl;
-    ss << "up-pump: " << (isUpPumpOn() ? "on" : "off") << endl;
-    ss << "up-pump auto cutoff: " << getUpPumpAutoCutoffSec() << " seconds";
+    ss << "status: fish=" << (isFishPumpOn() ? "on" : "off")
+       << " up=" << (isUpPumpOn() ? "on" : "off")
+       << " up_cutoff=" << getUpPumpAutoCutoffSec() << "s";
 
     return ss.str();
 }
@@ -523,6 +523,7 @@ string MeshPump::handlePump(uint32_t node_num, string &message)
     bool onOff = false;
     unsigned int cutoff = 0;
 
+    (void)(node_num);
     (void)(message);
 
     first_word = message.substr(0, message.find(' '));
@@ -577,27 +578,20 @@ string MeshPump::handlePump(uint32_t node_num, string &message)
 
     if (isFish) {
         setFishPumpOnOff(onOff);
-        reply = "set fish-pump to ";
-        reply += (onOff ? "on" : "off");
-        reply += " by ";
-        reply += getDisplayName(node_num);
+        reply = string("pump: fish=") + (onOff ? "on" : "off");
     } else if (isUp) {
         if (onOff == false) {
             setUpPumpOnOff(false);
-            reply = "set up-pump to off by " + getDisplayName(node_num);
+            reply = "pump: up=off";
         } else {
             if (cutoff == 0) {
                 setUpPumpOnOff(true);
-                reply = "set up-pump to on for " +
-                    to_string(getUpPumpAutoCutoffSec()) +
-                    " seconds by " +
-                    getDisplayName(node_num);
+                reply = "pump: up=on cutoff=" +
+                    to_string(getUpPumpAutoCutoffSec()) + "s";
             } else {
                 setUpPumpOnWithCutoffSec(cutoff);
-                reply = "set up-pump to on for " +
-                    to_string(cutoff) +
-                    " seconds by " +
-                    getDisplayName(node_num);
+                reply = "pump: up=on cutoff=" +
+                    to_string(cutoff) + "s";
             }
         }
     }
