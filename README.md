@@ -14,7 +14,7 @@
 - **Automated Scheduled Lighting**: Crontab-driven scheduled lighting/relay automation (GPIO21) synchronized with local time.
 - **MAX7219 LED Dot-Matrix Display**: Real-time multi-panel 8x8/8x32 LED scrolling message display supporting multi-row messages, per-row TTL expiration, adjustable scroll step delays, and per-row slowdown factors (`sf`).
 - **Raspberry Pi Telemetry**: Real-time Broadcom VCIO CPU core temperature monitoring and ambient environmental telemetry.
-- **HomeMesh Auto-Discovery & Machine-Readable Rollcall**: Full compliance with the `HomeMesh` automation protocol, providing structured capability reporting (`rollcall: app=meshpump ver=2.1.3 hw=linux caps=pump_fish,pump_up,led,env`) for automatic entity discovery in [MeshMon](https://github.com) and Home Assistant.
+- **HomeMesh Auto-Discovery (`identify`)**: Full compliance with the `HomeMesh` automation protocol, providing structured capability reporting (`identify: app=meshpump ver=2.1.4 hw=linux caps=pump_fish,pump_up,led,env`) for automatic entity discovery in [MeshMon](https://github.com) and Home Assistant.
 - **Dual Interactive Command Shells**: Concurrent, non-blocking command-line shells on standard I/O (local terminal console) and TCP network socket for remote diagnostics and live hardware control.
 - **Non-Volatile Configuration Persistence**: Atomic, file-backed storage (`~/.meshpump`) for authorized channels, encryption keys, admin/mate access control lists, and runtime preferences.
 
@@ -39,7 +39,7 @@ The `doc/` directory contains protocol and architecture specifications:
 
 | Document | Description |
 | :--- | :--- |
-| [**`doc/HomeChat-meshpump.md`**](doc/HomeChat-meshpump.md) | Full specification of `meshpump` HomeChat commands (pump relay control, safety cutoff timers, MAX7219 LED matrix, CPU temperature telemetry, and HomeMesh rollcall auto-discovery). |
+| [**`doc/HomeChat-meshpump.md`**](doc/HomeChat-meshpump.md) | Full specification of `meshpump` HomeChat commands (pump relay control, safety cutoff timers, MAX7219 LED matrix, CPU temperature telemetry, and HomeMesh `identify` auto-discovery). |
 
 ---
 
@@ -102,10 +102,10 @@ Available commands:
 
 ## HomeMesh Automation Integration
 
-`meshpump` automatically announces itself on the Meshtastic robot channel and registers with [MeshMon](https://github.com) gateways. When `MeshMon` issues a targeted or broadcast `rollcall` discovery request, `meshpump` reports its active capabilities:
+`meshpump` automatically announces itself on the Meshtastic robot channel and registers with [MeshMon](https://github.com) gateways. When `MeshMon` issues a targeted `!nodeid identify` (or `all identify`) discovery request, `meshpump` reports its active capabilities:
 
 ```text
-rollcall: app=meshpump ver=2.1.3 hw=linux caps=pump_fish,pump_up,led,env
+identify: app=meshpump ver=2.1.4 hw=linux caps=pump_fish,pump_up,led,env
 ```
 
 `MeshMon` automatically provisions corresponding Home Assistant MQTT Auto-Discovery entities:

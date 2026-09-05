@@ -419,6 +419,11 @@ string MeshPump::handleUnknown(uint32_t node_num, uint32_t dest, uint8_t channel
         reply = handlePump(node_num, message);
     } else if (first_word == "rollcall") {
         reply = handleRollcall(node_num, message);
+    } else if (first_word == "identify") {
+        reply = handleRollcall(node_num, message);
+        if (reply.compare(0, 9, "rollcall:") == 0) {
+            reply.replace(0, 8, "identify");
+        }
     }
 
     return reply;

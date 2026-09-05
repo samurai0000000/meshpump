@@ -48,16 +48,17 @@ Controls attached MAX7219 8x8 / 8x32 cascading LED dot-matrix display panels:
 
 ---
 
-## 4. HomeMesh Auto-Discovery & Rollcall
+## 4. HomeMesh Auto-Discovery (`identify`)
 
 `meshpump` supports machine-readable capability reporting for automatic registration with `meshmon` gateways and Home Assistant:
 
-* **Command**: `rollcall [target]`
-  * If `target` is specified (by hex node ID, decimal ID, short name, or long name), `meshpump` only responds if targeted to itself or `"all"`.
+* **MeshMon probe**: `identify` (typically `!nodeid identify` or `all identify` on the robot channel).
+  * HomeChat addressing (node hex, short name, long name, or `all`) selects who replies. A remaining target token is also honored the same way as `rollcall [target]`.
 * **Structured Response**:
   ```text
-  rollcall: app=meshpump ver=2.1.3 hw=linux caps=pump_fish,pump_up,led,env
+  identify: app=meshpump ver=2.1.4 hw=linux caps=pump_fish,pump_up,led,env
   ```
+* **HomeChat `rollcall [target]`**: still supported for human rollcall and still returns `rollcall: app=meshpump …`. MeshMon does not use `rollcall` for fleet probing.
 
 ### Exported Subsystem Capabilities:
 - `pump_fish`: Fish pond water circulation pump switch (`switch.meshmon_<node>_pump_fish`).
