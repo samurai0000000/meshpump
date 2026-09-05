@@ -78,6 +78,7 @@ protected:
     virtual string handleEnv(uint32_t node_num, string &message);
     virtual string handleStatus(uint32_t node_num, string &message);
     virtual string handleUnknown(uint32_t node_num, uint32_t dest, uint8_t channel, string &message);
+    virtual string handleRollcall(uint32_t node_num, string &message);
     virtual string handleLed(uint32_t node_num, string &message);
     virtual string handlePump(uint32_t node_num, string &message);
     virtual int vprintf(const char *format, va_list ap) const;

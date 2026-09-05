@@ -19,6 +19,7 @@
 #include <ctime>
 #include <MeshPump.hxx>
 #include <LedMatrix.hxx>
+#include "version.h"
 
 extern shared_ptr<MeshPump> meshpump;
 extern shared_ptr<LedMatrix> ledMatrix;
@@ -416,7 +417,72 @@ string MeshPump::handleUnknown(uint32_t node_num, uint32_t dest, uint8_t channel
         reply = handleLed(node_num, message);
     } else if (first_word == "pump") {
         reply = handlePump(node_num, message);
+    } else if (first_word == "rollcall") {
+        reply = handleRollcall(node_num, message);
     }
+
+    return reply;
+}
+
+string MeshPump::handleRollcall(uint32_t node_num, string &message)
+{
+    string reply;
+
+    (void)(node_num);
+
+    trimWhitespace(message);
+
+    if (!message.empty()) {
+        string target = message;
+        string first_word = target.substr(0, target.find(' '));
+        toLowercase(first_word);
+
+        if (first_word != "all") {
+            bool matches = false;
+
+            if (_client != NULL) {
+                uint32_t whoami = _client->whoami();
+                char hexBuf1[16], hexBuf2[16], hexBuf3[16];
+                snprintf(hexBuf1, sizeof(hexBuf1), "!%08x", (unsigned int)whoami);
+                snprintf(hexBuf2, sizeof(hexBuf2), "0x%08x", (unsigned int)whoami);
+                snprintf(hexBuf3, sizeof(hexBuf3), "%08x", (unsigned int)whoami);
+
+                string myShortName = _client->lookupShortName(whoami);
+                toLowercase(myShortName);
+                string myLongName = _client->lookupLongName(whoami);
+                toLowercase(myLongName);
+
+                if (first_word == hexBuf1 ||
+                    first_word == hexBuf2 ||
+                    first_word == hexBuf3 ||
+                    first_word == myShortName ||
+                    first_word == myLongName ||
+                    first_word == _client->whoamiString()) {
+                    matches = true;
+                } else {
+                    uint32_t targetId = 0;
+                    if (first_word.size() > 1 && first_word[0] == '!') {
+                        targetId = (uint32_t)strtoul(first_word.c_str() + 1, NULL, 16);
+                    } else if (first_word.rfind("0x", 0) == 0) {
+                        targetId = (uint32_t)strtoul(first_word.c_str(), NULL, 16);
+                    } else {
+                        targetId = (uint32_t)strtoul(first_word.c_str(), NULL, 10);
+                    }
+                    if (targetId != 0 && targetId == whoami) {
+                        matches = true;
+                    }
+                }
+            }
+
+            if (!matches) {
+                return "";
+            }
+        }
+    }
+
+    reply = "rollcall: app=meshpump ver=";
+    reply += MYPROJECT_VERSION_STRING;
+    reply += " hw=linux caps=pump_fish,pump_up,led,env";
 
     return reply;
 }
@@ -525,6 +591,14 @@ string MeshPump::handlePump(uint32_t node_num, string &message)
 
     (void)(node_num);
     (void)(message);
+
+    trimWhitespace(message);
+    if (message.empty() || message == "status") {
+        reply = string("pump: fish=") + (isFishPumpOn() ? "on" : "off") +
+            " up=" + (isUpPumpOn() ? "on" : "off") +
+            " cutoff=" + to_string(getUpPumpAutoCutoffSec()) + "s";
+        return reply;
+    }
 
     first_word = message.substr(0, message.find(' '));
     toLowercase(first_word);
