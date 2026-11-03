@@ -6,6 +6,7 @@
 
 #include <string>
 #include <stdexcept>
+#include <cctype>
 #include <MeshPump.hxx>
 #include <LedMatrix.hxx>
 #include <MeshPumpShell.hxx>
@@ -28,7 +29,7 @@ MeshPumpShell::~MeshPumpShell()
 
 shared_ptr<MeshShell> MeshPumpShell::newInstance(void)
 {
-    return make_shared<MeshPumpShell>();
+    return make_shared<MeshPumpShell>(_client);
 }
 
 int MeshPumpShell::system(int argc, char **argv)
@@ -38,33 +39,69 @@ int MeshPumpShell::system(int argc, char **argv)
         return MeshShell::system(argc, argv);
     }
 
-    shared_ptr<MeshPump> meshpump = dynamic_pointer_cast<MeshPump>(_client);
+    shared_ptr<MeshPump> mp = dynamic_pointer_cast<MeshPump>(_client);
+    if (!mp) {
+        mp = meshpump;
+    }
     static const char *pump_argv[] = { "pump", };
     static const char *lighting_argv[] = { "lighting", };
 
     MeshShell::system(argc, argv);
-    if (meshpump == NULL) {
+    if (mp == NULL) {
         return 0;
     }
 
     this->pump(1, (char **) pump_argv);
     this->lighting(1, (char **) lighting_argv);
-    this->printf("CPU temp: %.1fC\n", meshpump->getCpuTempC());
+    this->printf("CPU temp: %.1fC\n", mp->getCpuTempC());
 
     return 0;
 }
 
-static int getArgY(const char *s)
+static bool parseStrictInt(const char *s, int &val)
 {
-    int ret = 0;
+    string str;
+    size_t idx = 0;
+
+    if (s == NULL || s[0] == '\0') {
+        return false;
+    }
+    str = s;
+    for (size_t i = 0; i < str.size(); i++) {
+        if (i == 0 && (str[i] == '-' || str[i] == '+')) {
+            if (str.size() == 1) {
+                return false;
+            }
+            continue;
+        }
+        if (!isdigit((unsigned char) str[i])) {
+            return false;
+        }
+    }
 
     try {
-        ret = stoi(s);
-        if ((ret < 0) || (ret >= MAX7219_Y_COUNT)) {
-            ret = -1;
+        val = stoi(str, &idx);
+        if (idx != str.size()) {
+            return false;
         }
-    } catch (const invalid_argument &e) {
-        ret = -1;
+    } catch (const invalid_argument &) {
+        return false;
+    } catch (const out_of_range &) {
+        return false;
+    }
+
+    return true;
+}
+
+static int getArgY(const char *s)
+{
+    int ret = -1;
+
+    if (!parseStrictInt(s, ret)) {
+        return -1;
+    }
+    if ((ret < 0) || (ret >= MAX7219_Y_COUNT)) {
+        return -1;
     }
 
     return ret;
@@ -91,6 +128,11 @@ int MeshPumpShell::led(int argc, char **argv)
         return 0;
     }
 
+    if (!ledMatrix) {
+        this->printf("led matrix not initialized!\n");
+        return -1;
+    }
+
     if (argc == 1) {
         this->printf("delay: %ums\n", ledMatrix->delay());
         for (unsigned int y = 0; y < MAX7219_Y_COUNT; y++) {
@@ -100,40 +142,28 @@ int MeshPumpShell::led(int argc, char **argv)
         }
         goto done;
     } else if ((argc == 3) && (strcmp(argv[1], "delay") == 0)) {
-        try {
-            int ms = stoi(argv[2]);
-            if (ms <= 0) {
-                ret = -1;
-                this->printf("delay ms=%s is invalid!\n", argv[2]);
-                goto done;
-            }
-
-            ledMatrix->setDelay((unsigned int) ms);
-            this->printf("set delay to %ums\n", ms);
-            goto done;
-        } catch (const invalid_argument &e) {
+        int ms = 0;
+        if (!parseStrictInt(argv[2], ms) || (ms <= 0)) {
             ret = -1;
             this->printf("delay ms=%s is invalid!\n", argv[2]);
             goto done;
         }
+
+        ledMatrix->setDelay((unsigned int) ms);
+        this->printf("set delay to %ums\n", ms);
+        goto done;
     } else if ((argc == 4) && (strcmp(argv[1], "sf") == 0) &&
                ((y = getArgY(argv[2])) != -1)) {
-        try {
-            int sf = stoi(argv[3]);
-            if (sf < 1) {
-                ret = -1;
-                this->printf("sf=%s is invalid!\n", argv[3]);
-                goto done;
-            }
-
-            ledMatrix->setSlowdownFactor(y, (unsigned int) sf);
-            this->printf("set sf of row %u to %u\n", y, sf);
-            goto done;
-        } catch (const invalid_argument &e) {
+        int sf = 0;
+        if (!parseStrictInt(argv[3], sf) || (sf < 1)) {
             ret = -1;
             this->printf("sf=%s is invalid!\n", argv[3]);
             goto done;
         }
+
+        ledMatrix->setSlowdownFactor(y, (unsigned int) sf);
+        this->printf("set sf of row %u to %u\n", y, sf);
+        goto done;
     } else if ((argc == 2) && (strcmp(argv[1], "blank") == 0)) {
         ledMatrix->clear();
         goto done;
@@ -185,13 +215,22 @@ int MeshPumpShell::pump(int argc, char **argv)
         return 0;
     }
 
+    shared_ptr<MeshPump> mp = dynamic_pointer_cast<MeshPump>(_client);
+    if (!mp) {
+        mp = meshpump;
+    }
+    if (!mp) {
+        this->printf("meshpump not initialized!\n");
+        return -1;
+    }
+
     if (argc == 1) {
         this->printf("fish-pump: %s\n",
-                     meshpump->isFishPumpOn() ? "on" : "off");
+                     mp->isFishPumpOn() ? "on" : "off");
         this->printf("up-pump: %s\n",
-                     meshpump->isUpPumpOn() ? "on" : "off");
+                     mp->isUpPumpOn() ? "on" : "off");
         this->printf("up-pump auto cutoff: %u\n",
-                     meshpump->getUpPumpAutoCutoffSec());
+                     mp->getUpPumpAutoCutoffSec());
     } else {
         if ((argc > 1) &&
             ((strcasecmp(argv[1], "0") == 0) ||
@@ -199,7 +238,7 @@ int MeshPumpShell::pump(int argc, char **argv)
              (strcasecmp(argv[1], "fish-pump") == 0))) {
             isFish = true;
         } else if ((argc > 1) &&
-                   ((strcasecmp(argv[1], "0") == 0) ||
+                   ((strcasecmp(argv[1], "1") == 0) ||
                     (strcasecmp(argv[1], "up") == 0) ||
                     (strcasecmp(argv[1], "up-pump") == 0))) {
             isUp = true;
@@ -220,14 +259,24 @@ int MeshPumpShell::pump(int argc, char **argv)
         }
 
         if (isUp && (onOff == true) && (argc > 3)) {
-            try {
-                cutoff = stoi(argv[3]);
-            } catch (const invalid_argument &e) {
+            int parsedCutoff = 0;
+            bool allDigits = (argv[3][0] != '\0');
+
+            for (size_t i = 0; argv[3][i] != '\0'; i++) {
+                if (!isdigit((unsigned char) argv[3][i])) {
+                    allDigits = false;
+                    break;
+                }
+            }
+
+            if (!allDigits || !parseStrictInt(argv[3], parsedCutoff) ||
+                (parsedCutoff < MIN_UPPUMP_AUTO_CUTOFF_SEC)) {
                 ret = -1;
                 this->printf("cutoff '%s' argument is invalid!\n", argv[3]);
                 goto done;
             }
 
+            cutoff = (unsigned int) parsedCutoff;
             if (cutoff > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
                 ret = -1;
                 this->printf("cut-off of %u seconds is too big!\n", cutoff);
@@ -236,19 +285,19 @@ int MeshPumpShell::pump(int argc, char **argv)
         }
 
         if (isFish) {
-            meshpump->setFishPumpOnOff(onOff);
+            mp->setFishPumpOnOff(onOff);
             this->printf("set fish-pump to %s\n", onOff ? "on" : "off");
         } else if (isUp) {
             if (onOff == false) {
-                meshpump->setUpPumpOnOff(false);
+                mp->setUpPumpOnOff(false);
                 this->printf("set up-pump to off\n");
             } else {
                 if (cutoff == 0) {
-                    meshpump->setUpPumpOnOff(true);
+                    mp->setUpPumpOnOff(true);
                     this->printf("set up-pump to on for %u seconds\n",
-                                 meshpump->getUpPumpAutoCutoffSec());
+                                 mp->getUpPumpAutoCutoffSec());
                 } else {
-                    meshpump->setUpPumpOnWithCutoffSec(cutoff);
+                    mp->setUpPumpOnWithCutoffSec(cutoff);
                     this->printf("set up-pump to on for %u seconds\n",
                                  cutoff);
                 }
@@ -275,13 +324,22 @@ int MeshPumpShell::lighting(int argc, char **argv)
         return 0;
     }
 
+    shared_ptr<MeshPump> mp = dynamic_pointer_cast<MeshPump>(_client);
+    if (!mp) {
+        mp = meshpump;
+    }
+    if (!mp) {
+        this->printf("meshpump not initialized!\n");
+        return -1;
+    }
+
     if (argc == 1) {
-        this->printf("lighting: %s\n", meshpump->isLightingOn() ?
+        this->printf("lighting: %s\n", mp->isLightingOn() ?
                      "on" : "off");
     } else if ((argc == 2) && (strcasecmp(argv[1], "on") == 0)) {
-        meshpump->setLightingOnOff(true);
+        mp->setLightingOnOff(true);
     } else if ((argc == 2) && (strcasecmp(argv[1], "off") == 0)) {
-        meshpump->setLightingOnOff(false);
+        mp->setLightingOnOff(false);
     } else {
         this->printf("syntax error!\n");
         ret = -1;

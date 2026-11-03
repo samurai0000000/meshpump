@@ -1,2 +1,6 @@
 build/
-.cursor/
+build-sanitized/
+.cursor
+.agents
+.claude
+plan/

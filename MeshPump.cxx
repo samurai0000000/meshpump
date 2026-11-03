@@ -25,46 +25,58 @@ extern shared_ptr<MeshPump> meshpump;
 extern shared_ptr<LedMatrix> ledMatrix;
 
 MeshPump::MeshPump()
-    : MeshClient()
+    : MeshClient(),
+      _cutoffStop(false),
+      _upPumpDeadline(chrono::steady_clock::time_point::max()),
+      _gpiochip(-1),
+      _fishPump(true),
+      _upPump(false),
+      _upPumpAutoCutoffSec(10),
+      _lighting(false),
+      _lastScheduledLighting(-1)
 {
     int status;
-
-    _gpiochip = -1;
-    signal(SIGALRM, alarmHandler);
 
     _gpiochip = openGpiochip();
     if (_gpiochip < 0) {
         cerr << "lgGpiochipOpen failed: " << lguErrorText(_gpiochip) << endl;
-        exit(EXIT_FAILURE);
-    }
-
-    status = lgGpioClaimOutput(_gpiochip, 0, RELAY1_PIN, 0);
-    if (status < 0) {
-        cerr << "lgGpioClaimOutput " << RELAY1_PIN << " failed: "
-             << lguErrorText(status) << endl;
-        exit(EXIT_FAILURE);
-    }
-    status = lgGpioClaimOutput(_gpiochip, 0, RELAY2_PIN, 1);
-    if (status < 0) {
-        cerr << "lgGpioClaimOutput " << RELAY2_PIN << " failed: "
-             << lguErrorText(status) << endl;
-        exit(EXIT_FAILURE);
-    }
-    status = lgGpioClaimOutput(_gpiochip, 0, RELAY3_PIN, 1);
-    if (status < 0) {
-        cerr << "lgGpioClaimOutput " << RELAY3_PIN << " failed: "
-             << lguErrorText(status) << endl;
-        exit(EXIT_FAILURE);
+    } else {
+        status = lgGpioClaimOutput(_gpiochip, 0, RELAY1_PIN, 0);
+        if (status < 0) {
+            cerr << "lgGpioClaimOutput " << RELAY1_PIN << " failed: "
+                 << lguErrorText(status) << endl;
+        }
+        status = lgGpioClaimOutput(_gpiochip, 0, RELAY2_PIN, 1);
+        if (status < 0) {
+            cerr << "lgGpioClaimOutput " << RELAY2_PIN << " failed: "
+                 << lguErrorText(status) << endl;
+        }
+        status = lgGpioClaimOutput(_gpiochip, 0, RELAY3_PIN, 1);
+        if (status < 0) {
+            cerr << "lgGpioClaimOutput " << RELAY3_PIN << " failed: "
+                 << lguErrorText(status) << endl;
+        }
     }
 
     setFishPumpOnOff(true);
     setUpPumpOnOff(false);
     setUpPumpAutoCutoffSec(10);
     setLightingOnOff(false);
+
+    _cutoffThread = thread(&MeshPump::cutoffThreadFunc, this);
 }
 
 MeshPump::~MeshPump()
 {
+    {
+        lock_guard<mutex> lock(_pumpMutex);
+        _cutoffStop = true;
+    }
+    _cutoffCv.notify_all();
+    if (_cutoffThread.joinable()) {
+        _cutoffThread.join();
+    }
+
     setFishPumpOnOff(true);
     setUpPumpOnOff(false);
     setLightingOnOff(false);
@@ -163,13 +175,17 @@ void MeshPump::loop(void)
 
 bool MeshPump::isFishPumpOn(void) const
 {
+    lock_guard<mutex> lock(_pumpMutex);
     return _fishPump;
 }
 
 void MeshPump::setFishPumpOnOff(bool onOff)
 {
-    _fishPump = onOff;
-    gpioWrite(RELAY1_PIN, !onOff);
+    {
+        lock_guard<mutex> lock(_pumpMutex);
+        _fishPump = onOff;
+        gpioWrite(RELAY1_PIN, !onOff);
+    }
     if (ledMatrix) {
         if (onOff) {
             ledMatrix->setText(3, "  ON", 60);
@@ -179,15 +195,37 @@ void MeshPump::setFishPumpOnOff(bool onOff)
     }
 }
 
-void MeshPump::alarmHandler(int signum)
+void MeshPump::cutoffThreadFunc(void)
 {
-    if (signum == SIGALRM) {
-        meshpump->setUpPumpOnOff(false);
+    unique_lock<mutex> lock(_pumpMutex);
+
+    while (!_cutoffStop) {
+        if (!_upPump) {
+            _cutoffCv.wait(lock, [this]() {
+                return _cutoffStop || _upPump;
+            });
+            continue;
+        }
+
+        auto now = chrono::steady_clock::now();
+        if (now >= _upPumpDeadline) {
+            _upPump = false;
+            _upPumpDeadline = chrono::steady_clock::time_point::max();
+            gpioWrite(RELAY2_PIN, 1);
+            lock.unlock();
+            if (ledMatrix) {
+                ledMatrix->setText(2, " OFF", 60);
+            }
+            lock.lock();
+        } else {
+            _cutoffCv.wait_until(lock, _upPumpDeadline);
+        }
     }
 }
 
 bool MeshPump::isUpPumpOn(void) const
 {
+    lock_guard<mutex> lock(_pumpMutex);
     return _upPump;
 }
 
@@ -196,7 +234,13 @@ void MeshPump::setUpPumpOnOff(bool onOff)
     if (onOff) {
         setUpPumpOnWithCutoffSec(getUpPumpAutoCutoffSec());
     } else {
-        gpioWrite(RELAY2_PIN, !onOff);
+        {
+            lock_guard<mutex> lock(_pumpMutex);
+            _upPump = false;
+            _upPumpDeadline = chrono::steady_clock::time_point::max();
+            gpioWrite(RELAY2_PIN, 1);
+        }
+        _cutoffCv.notify_all();
         if (ledMatrix) {
             ledMatrix->setText(2, " OFF", 60);
         }
@@ -205,16 +249,22 @@ void MeshPump::setUpPumpOnOff(bool onOff)
 
 void MeshPump::setUpPumpOnWithCutoffSec(unsigned int seconds)
 {
-    if (seconds > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
+    if ((seconds < MIN_UPPUMP_AUTO_CUTOFF_SEC) ||
+        (seconds > MAX_UPPUMP_AUTO_CUTOFF_SEC)) {
         goto done;
     }
 
-    _upPump = true;
-    gpioWrite(RELAY2_PIN, !_upPump);
+    {
+        lock_guard<mutex> lock(_pumpMutex);
+        _upPump = true;
+        _upPumpDeadline = chrono::steady_clock::now() +
+            chrono::seconds(seconds);
+        gpioWrite(RELAY2_PIN, 0);
+    }
+    _cutoffCv.notify_all();
     if (ledMatrix) {
         ledMatrix->setText(2, "  ON", UINT_MAX);
     }
-    alarm(seconds);
 
 done:
 
@@ -223,16 +273,21 @@ done:
 
 unsigned int MeshPump::getUpPumpAutoCutoffSec(void) const
 {
+    lock_guard<mutex> lock(_pumpMutex);
     return _upPumpAutoCutoffSec;
 }
 
 void MeshPump::setUpPumpAutoCutoffSec(unsigned int seconds)
 {
-    if (seconds > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
+    if ((seconds < MIN_UPPUMP_AUTO_CUTOFF_SEC) ||
+        (seconds > MAX_UPPUMP_AUTO_CUTOFF_SEC)) {
         goto done;
     }
 
-    _upPumpAutoCutoffSec = seconds;
+    {
+        lock_guard<mutex> lock(_pumpMutex);
+        _upPumpAutoCutoffSec = seconds;
+    }
 
 done:
 
@@ -241,17 +296,23 @@ done:
 
 bool MeshPump::isLightingOn(void) const
 {
+    lock_guard<mutex> lock(_pumpMutex);
     return _lighting;
 }
 
 void MeshPump::setLightingOnOff(bool onOff)
 {
-    _lighting = onOff;
-    gpioWrite(RELAY3_PIN, !onOff);
-    if (onOff) {
-        ledMatrix->setText(1, "  ON", 60);
-    } else {
-        ledMatrix->setText(1, " OFF", 60);
+    {
+        lock_guard<mutex> lock(_pumpMutex);
+        _lighting = onOff;
+        gpioWrite(RELAY3_PIN, !onOff);
+    }
+    if (ledMatrix) {
+        if (onOff) {
+            ledMatrix->setText(1, "  ON", 60);
+        } else {
+            ledMatrix->setText(1, " OFF", 60);
+        }
     }
 }
 
@@ -269,17 +330,26 @@ void MeshPump::gotTextMessage(const meshtastic_MeshPacket &packet,
 
 void MeshPump::crontab(const struct tm *now)
 {
-    int hour = now->tm_hour;
+    int hour;
     bool shouldTurnOn = false;
 
+    MeshClient::crontab(now);
+    if (now == NULL) {
+        return;
+    }
+
+    hour = now->tm_hour;
     if ((hour <= 5) || (hour > 18)) {
         shouldTurnOn = true;
     } else {
         shouldTurnOn = false;
     }
 
-    if (shouldTurnOn != isLightingOn()) {
-        setLightingOnOff(shouldTurnOn);
+    if (_lastScheduledLighting != (int) shouldTurnOn) {
+        _lastScheduledLighting = (int) shouldTurnOn;
+        if (shouldTurnOn != isLightingOn()) {
+            setLightingOnOff(shouldTurnOn);
+        }
     }
 }
 
@@ -314,9 +384,27 @@ float MeshPump::getCpuTempC(void)
     const char *s;
     string str;
 
+    memset(p, 0, sizeof(p));
+
     fd = open("/dev/vcio", 0);
     if (fd == -1) {
-        fprintf(stderr, "open: %s!\n", strerror(errno));
+        int vcioErrno = errno;
+        FILE *fp = fopen("/sys/class/thermal/thermal_zone0/temp", "r");
+        if (fp != NULL) {
+            char buf[64];
+            if (fgets(buf, sizeof(buf), fp) != NULL) {
+                try {
+                    tempC = stof(buf) / 1000.0f;
+                } catch (const invalid_argument &) {
+                } catch (const out_of_range &) {
+                }
+            }
+            fclose(fp);
+            goto done;
+        }
+        if (vcioErrno != ENOENT) {
+            fprintf(stderr, "open: %s!\n", strerror(vcioErrno));
+        }
         goto done;
     }
 
@@ -345,7 +433,7 @@ float MeshPump::getCpuTempC(void)
         for (size_t j = 0; j < slen; j++) {
             unsigned char c = (unsigned char) s[j];
 
-            if (s[j] == '\'') {
+            if ((s[j] == '\0') || (s[j] == '\'')) {
                 break;
             }
             if (isdigit(c) || (s[j] == '.')) {
@@ -354,10 +442,12 @@ float MeshPump::getCpuTempC(void)
         }
     }
 
-    try {
-        tempC = stof(str);
-    } catch (const invalid_argument& e) {
-    } catch (const out_of_range &e) {
+    if (!str.empty()) {
+        try {
+            tempC = stof(str);
+        } catch (const invalid_argument &) {
+        } catch (const out_of_range &) {
+        }
     }
 
 done:
@@ -466,12 +556,32 @@ string MeshPump::handleRollcall(uint32_t node_num, string &message)
                     matches = true;
                 } else {
                     uint32_t targetId = 0;
+                    const char *start = NULL;
+                    char *endptr = NULL;
+                    unsigned long parsed = 0;
+                    int base = 10;
+
                     if (first_word.size() > 1 && first_word[0] == '!') {
-                        targetId = (uint32_t)strtoul(first_word.c_str() + 1, NULL, 16);
-                    } else if (first_word.rfind("0x", 0) == 0) {
-                        targetId = (uint32_t)strtoul(first_word.c_str(), NULL, 16);
+                        start = first_word.c_str() + 1;
+                        base = 16;
+                    } else if (first_word.size() > 2 &&
+                               first_word.rfind("0x", 0) == 0) {
+                        start = first_word.c_str() + 2;
+                        base = 16;
                     } else {
-                        targetId = (uint32_t)strtoul(first_word.c_str(), NULL, 10);
+                        start = first_word.c_str();
+                        base = 10;
+                    }
+
+                    if (start != NULL && start[0] != '\0' &&
+                        start[0] != '-' && start[0] != '+' &&
+                        !isspace((unsigned char) start[0])) {
+                        errno = 0;
+                        parsed = strtoul(start, &endptr, base);
+                        if (errno == 0 && endptr != start &&
+                            *endptr == '\0' && parsed <= UINT32_MAX) {
+                            targetId = (uint32_t) parsed;
+                        }
                     }
                     if (targetId != 0 && targetId == whoami) {
                         matches = true;
@@ -492,17 +602,48 @@ string MeshPump::handleRollcall(uint32_t node_num, string &message)
     return reply;
 }
 
-static int getArgY(const char *s)
+static bool parseStrictInt(const string &s, int &val)
 {
-    int ret = 0;
+    size_t idx = 0;
+
+    if (s.empty()) {
+        return false;
+    }
+    for (size_t i = 0; i < s.size(); i++) {
+        if (i == 0 && (s[i] == '-' || s[i] == '+')) {
+            if (s.size() == 1) {
+                return false;
+            }
+            continue;
+        }
+        if (!isdigit((unsigned char) s[i])) {
+            return false;
+        }
+    }
 
     try {
-        ret = stoi(s);
-        if ((ret < 0) || (ret >= MAX7219_Y_COUNT)) {
-            ret = -1;
+        val = stoi(s, &idx);
+        if (idx != s.size()) {
+            return false;
         }
-    } catch (const invalid_argument &e) {
-        ret = -1;
+    } catch (const invalid_argument &) {
+        return false;
+    } catch (const out_of_range &) {
+        return false;
+    }
+
+    return true;
+}
+
+static int getArgY(const char *s)
+{
+    int ret = -1;
+
+    if (s == NULL || !parseStrictInt(s, ret)) {
+        return -1;
+    }
+    if ((ret < 0) || (ret >= MAX7219_Y_COUNT)) {
+        return -1;
     }
 
     return ret;
@@ -511,14 +652,21 @@ static int getArgY(const char *s)
 string MeshPump::handleLed(uint32_t node_num, string &message)
 {
     stringstream ss;
-    istringstream iss(message);
     vector<string> tokens;
     string token;
     string first_word;
     int y;
 
-    while (getline(iss, token, ' ')) {
-        tokens.push_back(token);
+    if (!ledMatrix) {
+        return "led matrix not initialized!";
+    }
+
+    trimWhitespace(message);
+    {
+        istringstream iss(message);
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
     }
 
     if (tokens.size() > 0) {
@@ -527,36 +675,26 @@ string MeshPump::handleLed(uint32_t node_num, string &message)
     }
 
     if ((first_word == "delay") && (tokens.size() == 2)) {
-        try {
-            int ms = stoi(tokens[1]);
-            if (ms <= 0) {
-                ss << "delay ms=" << tokens[1] << " is invalid!";
-                goto done;
-            }
-
-            ledMatrix->setDelay((unsigned int) ms);
-            ss << "set delay to " << ms << "ms";
-            goto done;
-        } catch (const invalid_argument &e) {
-            ss << "delay ms=" << tokens[2] << " is invalid!";
+        int ms = 0;
+        if (!parseStrictInt(tokens[1], ms) || (ms <= 0)) {
+            ss << "delay ms=" << tokens[1] << " is invalid!";
             goto done;
         }
+
+        ledMatrix->setDelay((unsigned int) ms);
+        ss << "set delay to " << ms << "ms";
+        goto done;
     } else if ((first_word == "sf") && (tokens.size() == 3) &&
                ((y = getArgY(tokens[1].c_str())) != -1)) {
-        try {
-            int sf = stoi(tokens[2]);
-            if (sf < 1) {
-                ss << "sf=" << tokens[2] << " is invalid!";
-                goto done;
-            }
-
-            ledMatrix->setSlowdownFactor(y, (unsigned int) sf);
-            ss << "set sf of row " << y << " to " << sf;
-            goto done;
-        } catch (const invalid_argument &e) {
+        int sf = 0;
+        if (!parseStrictInt(tokens[2], sf) || (sf < 1)) {
             ss << "sf=" << tokens[2] << " is invalid!";
             goto done;
         }
+
+        ledMatrix->setSlowdownFactor(y, (unsigned int) sf);
+        ss << "set sf of row " << y << " to " << sf;
+        goto done;
     } else if (first_word == "blank") {
         ledMatrix->clear();
     } else if (first_word == "welcome") {
@@ -641,17 +779,29 @@ string MeshPump::handlePump(uint32_t node_num, string &message)
         third_word = message.substr(0, message.find(' '));
         toLowercase(third_word);
 
-        try {
-            cutoff = stoi(third_word);
-        } catch (const invalid_argument &e) {
-            reply = "cutoff '" + third_word + "' argument is invalid!";
-            goto done;
-        }
+        if (!third_word.empty()) {
+            int parsedCutoff = 0;
+            bool allDigits = true;
 
-        if (cutoff > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
-            reply = "cut-off of " + to_string(cutoff) +
-                " seconds is too big!";
-            goto done;
+            for (size_t i = 0; i < third_word.size(); i++) {
+                if (!isdigit((unsigned char) third_word[i])) {
+                    allDigits = false;
+                    break;
+                }
+            }
+
+            if (!allDigits || !parseStrictInt(third_word, parsedCutoff) ||
+                (parsedCutoff < MIN_UPPUMP_AUTO_CUTOFF_SEC)) {
+                reply = "cutoff '" + third_word + "' argument is invalid!";
+                goto done;
+            }
+
+            cutoff = (unsigned int) parsedCutoff;
+            if (cutoff > MAX_UPPUMP_AUTO_CUTOFF_SEC) {
+                reply = "cut-off of " + to_string(cutoff) +
+                    " seconds is too big!";
+                goto done;
+            }
         }
     }
 

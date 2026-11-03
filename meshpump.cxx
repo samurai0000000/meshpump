@@ -42,7 +42,8 @@ void sighandler(int signum)
     (void)(signum);
     g_stop = 1;
     if (g_stop_pipe[1] != -1) {
-        (void) write(g_stop_pipe[1], &c, 1);
+        ssize_t ret = write(g_stop_pipe[1], &c, 1);
+        (void) ret;
     }
 }
 
@@ -406,7 +407,8 @@ int main(int argc, char **argv)
     g_stop = 1;
     if (g_stop_pipe[1] != -1) {
         char c = 1;
-        (void) write(g_stop_pipe[1], &c, 1);
+        ssize_t ret = write(g_stop_pipe[1], &c, 1);
+        (void) ret;
     }
     if (stopThread.joinable()) {
         stopThread.join();

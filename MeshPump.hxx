@@ -7,6 +7,10 @@
 #ifndef MESHPUMP_HXX
 #define MESHPUMP_HXX
 
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <chrono>
 #include <HomeChat.hxx>
 #include <MeshClient.hxx>
 #include <MeshNvm.hxx>
@@ -15,6 +19,7 @@
 #define RELAY2_PIN  20
 #define RELAY3_PIN  21
 
+#define MIN_UPPUMP_AUTO_CUTOFF_SEC  1
 #define MAX_UPPUMP_AUTO_CUTOFF_SEC  120
 
 using namespace std;
@@ -85,16 +90,23 @@ protected:
 
 private:
 
-    static void alarmHandler(int signum);
+    void cutoffThreadFunc(void);
 
     int openGpiochip(void);
     void gpioWrite(int pin, int level);
+
+    mutable mutex _pumpMutex;
+    condition_variable _cutoffCv;
+    thread _cutoffThread;
+    bool _cutoffStop;
+    chrono::steady_clock::time_point _upPumpDeadline;
 
     int _gpiochip;
     bool _fishPump;
     bool _upPump;
     unsigned int _upPumpAutoCutoffSec;
     bool _lighting;
+    int _lastScheduledLighting;
 
 };
 

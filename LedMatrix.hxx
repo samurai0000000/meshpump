@@ -7,6 +7,7 @@
 #ifndef LEDMATRIX_HXX
 #define LEDMATRIX_HXX
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -56,17 +57,27 @@ private:
     static void *thread_func(void *);
     void run(void);
 
+    void setTextLocked(unsigned int y, const string &text,
+                       unsigned int ttl);
+    void drawLocked(unsigned int y, unsigned int x, const uint8_t fb[8]);
+    void drawSLLocked(unsigned int y, unsigned int x,
+                      unsigned int shift, bool clear,
+                      const uint8_t fb[8]);
+    void drawSRLocked(unsigned int y, unsigned int x,
+                      unsigned int shift, bool clear,
+                      const uint8_t fb[8]);
+    void repaintLocked(void);
+
     int writeMax7219(const void *data, size_t size);
     int writeMax7219(uint8_t reg, uint8_t data);
 
     int _handle;
-    int _fd;
     unsigned int _intensity;
     uint8_t _fb[4][4][8];
 
-    bool _running;
+    atomic<bool> _running;
     shared_ptr<thread> _thread;
-    mutex _mutex;
+    mutable mutex _mutex;
 
     string _text[MAX7219_Y_COUNT];
     unsigned int _ttl[MAX7219_Y_COUNT];
